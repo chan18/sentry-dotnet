@@ -47,7 +47,7 @@ namespace Sentry.Tests
         [Fact]
         public void Init_BrokenDsn_Throws()
         {
-            Assert.Throws<UriFormatException>(() => SentrySdk.Init("invalid stuff"));
+            _ = Assert.Throws<UriFormatException>(() => SentrySdk.Init("invalid stuff"));
         }
 
         [Fact]
@@ -61,14 +61,6 @@ namespace Sentry.Tests
         public void Init_ValidDsnWithoutSecret_EnablesSdk()
         {
             using (SentrySdk.Init(ValidDsnWithoutSecret))
-                Assert.True(SentrySdk.IsEnabled);
-        }
-
-        [Fact]
-        public void Init_DsnInstance_EnablesSdk()
-        {
-            var dsn = new Dsn(ValidDsnWithoutSecret);
-            using (SentrySdk.Init(dsn))
                 Assert.True(SentrySdk.IsEnabled);
         }
 
@@ -149,7 +141,7 @@ namespace Sentry.Tests
         public void Init_EmptyDsn_LogsWarning()
         {
             var logger = Substitute.For<IDiagnosticLogger>();
-            logger.IsEnabled(SentryLevel.Warning).Returns(true);
+            _ = logger.IsEnabled(SentryLevel.Warning).Returns(true);
 
             var options = new SentryOptions
             {
@@ -167,7 +159,7 @@ namespace Sentry.Tests
         public void Init_EmptyDsnDisabledDiagnostics_DoesNotLogWarning()
         {
             var logger = Substitute.For<IDiagnosticLogger>();
-            logger.IsEnabled(SentryLevel.Warning).Returns(true);
+            _ = logger.IsEnabled(SentryLevel.Warning).Returns(true);
 
             var options = new SentryOptions
             {
@@ -190,7 +182,7 @@ namespace Sentry.Tests
             SentrySdk.ConfigureScope(p =>
             {
                 called = true;
-                Assert.Single(p.Breadcrumbs);
+                _ = Assert.Single(p.Breadcrumbs);
             });
             Assert.True(called);
             called = false;
@@ -227,7 +219,7 @@ namespace Sentry.Tests
             SentrySdk.ConfigureScope(p =>
             {
                 called = true;
-                Assert.Single(p.Breadcrumbs);
+                _ = Assert.Single(p.Breadcrumbs);
             });
             Assert.True(called);
             second.Dispose();
@@ -269,7 +261,7 @@ namespace Sentry.Tests
         public void PushScope_MultiCallParameterless_SameDisposableInstance() => Assert.Same(SentrySdk.PushScope(), SentrySdk.PushScope());
 
         [Fact]
-        public void AddBreadcrumb_NoClock_NoOp() => SentrySdk.AddBreadcrumb(message: null);
+        public void AddBreadcrumb_NoClock_NoOp() => SentrySdk.AddBreadcrumb(null);
 
         [Fact]
         public void AddBreadcrumb_WithClock_NoOp() => SentrySdk.AddBreadcrumb(clock: null, null);
@@ -360,14 +352,14 @@ namespace Sentry.Tests
             const string expected = "test";
             using (SentrySdk.Init(o =>
             {
-                o.Dsn = Valid;
+                o.Dsn = ValidDsnWithSecret;
                 o.BackgroundWorker = worker;
             }))
             {
                 SentrySdk.AddBreadcrumb(expected);
-                SentrySdk.CaptureMessage("message");
+                _ = SentrySdk.CaptureMessage("message");
 
-                worker.EnqueueEvent(Arg.Is<SentryEvent>(e => e.Breadcrumbs.Single().Message == expected));
+                _ = worker.EnqueueEvent(Arg.Is<SentryEvent>(e => e.Breadcrumbs.Single().Message == expected));
             }
         }
 

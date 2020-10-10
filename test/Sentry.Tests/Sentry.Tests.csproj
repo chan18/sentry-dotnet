@@ -9,8 +9,16 @@
     <ProjectReference Include="../Sentry.Testing/Sentry.Testing.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-    <Reference Include="System.Web" />
+  <PropertyGroup Condition="$(TargetFramework.StartsWith('netcoreapp'))">
+    <DefineConstants>NETCOREAPP;$(AdditionalConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
+    <DefineConstants>NETFX;$(AdditionalConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net4'))">
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
   </ItemGroup>
 
 </Project>

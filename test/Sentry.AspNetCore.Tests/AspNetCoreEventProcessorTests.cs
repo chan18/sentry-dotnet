@@ -1,6 +1,8 @@
+using System;
 using Microsoft.Extensions.Options;
 using Sentry.Protocol;
 using Xunit;
+using OperatingSystem = Sentry.Protocol.OperatingSystem;
 
 namespace Sentry.AspNetCore.Tests
 {
@@ -20,7 +22,7 @@ namespace Sentry.AspNetCore.Tests
             var target = new SentryEvent();
             var expected = target.Contexts.Runtime;
 
-            _sut.Process(target);
+            _ = _sut.Process(target);
 
             Assert.Same(expected, target.Contexts["server-runtime"]);
         }
@@ -28,9 +30,9 @@ namespace Sentry.AspNetCore.Tests
         public void Process_WithoutRuntime_NoServerRuntime()
         {
             var target = new SentryEvent();
-            target.Contexts.TryRemove(Runtime.Type, out _);
+            _ = target.Contexts.TryRemove(Runtime.Type, out _);
 
-            _sut.Process(target);
+            _ = _sut.Process(target);
 
             Assert.False(target.Contexts.ContainsKey("server-runtime"));
         }
@@ -41,7 +43,7 @@ namespace Sentry.AspNetCore.Tests
             var target = new SentryEvent();
             var expected = target.Contexts.OperatingSystem;
 
-            _sut.Process(target);
+            _ = _sut.Process(target);
 
             Assert.Same(expected, target.Contexts["server-os"]);
         }
@@ -50,13 +52,34 @@ namespace Sentry.AspNetCore.Tests
         public void Process_WithoutOperatingSystem_NoServerOperatingSystem()
         {
             var target = new SentryEvent();
-            target.Contexts.TryRemove(OperatingSystem.Type, out _);
+            _ = target.Contexts.TryRemove(OperatingSystem.Type, out _);
 
-            _sut.Process(target);
+            _ = _sut.Process(target);
 
             Assert.False(target.Contexts.ContainsKey("server-os"));
         }
 
+        [Fact]
+        public void Process_ServerName_NotOverwritten()
+        {
+            var target = new SentryEvent();
+            const string expectedServerName = "original";
+            target.ServerName = expectedServerName;
+
+            _ = _sut.Process(target);
+
+            Assert.Equal(expectedServerName, target.ServerName);
+        }
+
+        [Fact]
+        public void Process_ServerName_SetToEnvironmentMachineName()
+        {
+            var target = new SentryEvent();
+
+            _ = _sut.Process(target);
+
+            Assert.Equal(Environment.MachineName, target.ServerName);
+        }
 
         [Fact]
         public void Process_AppliesDefaultTags()
@@ -66,7 +89,7 @@ namespace Sentry.AspNetCore.Tests
             var target = new SentryEvent();
             _options.DefaultTags[key] = expected;
 
-            _sut.Process(target);
+            _ = _sut.Process(target);
 
             Assert.Equal(expected, target.Tags[key]);
         }

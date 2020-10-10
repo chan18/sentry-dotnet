@@ -1,6 +1,5 @@
 using System;
 using Sentry.Extensibility;
-using Sentry.Http;
 using Sentry.Internal.Http;
 
 namespace Sentry.Internal
@@ -12,12 +11,12 @@ namespace Sentry.Internal
         public SdkComposer(SentryOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
-            if (options.Dsn == null) throw new ArgumentException("No DSN defined in the SentryOptions");
+            if (options.Dsn is null) throw new ArgumentException("No DSN defined in the SentryOptions");
         }
 
         public IBackgroundWorker CreateBackgroundWorker()
         {
-            if (_options.BackgroundWorker is IBackgroundWorker worker)
+            if (_options.BackgroundWorker is { } worker)
             {
                 _options.DiagnosticLogger?.LogDebug("Using IBackgroundWorker set through options: {0}.",
                     worker.GetType().Name);
@@ -25,23 +24,28 @@ namespace Sentry.Internal
                 return worker;
             }
 
+            if (_options.Dsn is null)
+            {
+                throw new InvalidOperationException("The DSN is expected to be set at this point.");
+            }
+
+            var dsn = Dsn.Parse(_options.Dsn);
+
             var addAuth = SentryHeaders.AddSentryAuth(
                 _options.SentryVersion,
                 _options.ClientVersion,
-                _options.Dsn.PublicKey,
-                _options.Dsn.SecretKey);
+                dsn.PublicKey,
+                dsn.SecretKey
+            );
 
-            if (_options.SentryHttpClientFactory is ISentryHttpClientFactory factory)
+            if (_options.SentryHttpClientFactory is {})
             {
                 _options.DiagnosticLogger?.LogDebug("Using ISentryHttpClientFactory set through options: {0}.",
-                    factory.GetType().Name);
-            }
-            else
-            {
-                factory = new DefaultSentryHttpClientFactory(_options.ConfigureHandler, _options.ConfigureClient);
+                    _options.SentryHttpClientFactory.GetType().Name);
             }
 
-            var httpClient = factory.Create(_options.Dsn, _options);
+            var httpClientFactory = _options.SentryHttpClientFactory ?? new DefaultSentryHttpClientFactory();
+            var httpClient = httpClientFactory.Create(_options);
 
             return new BackgroundWorker(new HttpTransport(_options, httpClient, addAuth), _options);
         }

@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,18 +7,18 @@ using Sentry.Extensibility;
 
 namespace Sentry.Internal
 {
-    internal class SentryScopeManager : IInternalScopeManager, IDisposable
+    internal sealed class SentryScopeManager : IInternalScopeManager, IDisposable
     {
         private readonly SentryOptions _options;
-        private readonly AsyncLocal<ImmutableStack<Tuple<Scope, ISentryClient>>> _asyncLocalScope = new AsyncLocal<ImmutableStack<Tuple<Scope, ISentryClient>>>();
+        private readonly AsyncLocal<KeyValuePair<Scope, ISentryClient>[]?> _asyncLocalScope = new AsyncLocal<KeyValuePair<Scope, ISentryClient>[]?>();
 
-        internal ImmutableStack<Tuple<Scope, ISentryClient>> ScopeAndClientStack
+        internal KeyValuePair<Scope, ISentryClient>[] ScopeAndClientStack
         {
             get => _asyncLocalScope.Value ?? (_asyncLocalScope.Value = NewStack());
             set => _asyncLocalScope.Value = value;
         }
 
-        private Func<ImmutableStack<Tuple<Scope, ISentryClient>>> NewStack { get; }
+        private Func<KeyValuePair<Scope, ISentryClient>[]> NewStack { get; }
 
         public SentryScopeManager(
             SentryOptions options,
@@ -26,49 +26,58 @@ namespace Sentry.Internal
         {
             Debug.Assert(rootClient != null);
             _options = options;
-            NewStack = () => ImmutableStack.Create(new Tuple<Scope, ISentryClient>(new Scope(options), rootClient));
+            NewStack = () => new [] { new KeyValuePair<Scope, ISentryClient>(new Scope(options), rootClient) };
         }
 
-        public Tuple<Scope, ISentryClient> GetCurrent() => ScopeAndClientStack.Peek();
-
-        public void ConfigureScope(Action<Scope> configureScope)
+        public KeyValuePair<Scope, ISentryClient> GetCurrent()
         {
-            _options?.DiagnosticLogger?.LogDebug("Configuring the scope.");
-            var scope = GetCurrent();
-            configureScope?.Invoke(scope.Item1);
+            var current = ScopeAndClientStack;
+            return current[current.Length - 1];
         }
 
-        public Task ConfigureScopeAsync(Func<Scope, Task> configureScope)
+        public void ConfigureScope(Action<Scope>? configureScope)
         {
-            _options?.DiagnosticLogger?.LogDebug("Configuring the scope asynchronously.");
+            _options.DiagnosticLogger?.LogDebug("Configuring the scope.");
             var scope = GetCurrent();
-            return configureScope?.Invoke(scope.Item1) ?? Task.CompletedTask;
+            configureScope?.Invoke(scope.Key);
         }
 
-        public IDisposable PushScope() => PushScope<object>(null);
+        public Task ConfigureScopeAsync(Func<Scope, Task>? configureScope)
+        {
+            _options.DiagnosticLogger?.LogDebug("Configuring the scope asynchronously.");
+            var scope = GetCurrent();
+            return configureScope?.Invoke(scope.Key) ?? Task.CompletedTask;
+        }
+
+        public IDisposable PushScope() => PushScope<object>(null!); // NRTs don't work well with generics
 
         public IDisposable PushScope<TState>(TState state)
         {
             var currentScopeAndClientStack = ScopeAndClientStack;
-            var (scope, client) = currentScopeAndClientStack.Peek();
+            var scope = currentScopeAndClientStack[currentScopeAndClientStack.Length - 1];
 
-            if (scope.Locked)
+            if (scope.Key.Locked)
             {
                 // TODO: keep state on current scope?
-                _options?.DiagnosticLogger?.LogDebug("Locked scope. No new scope pushed.");
+                _options.DiagnosticLogger?.LogDebug("Locked scope. No new scope pushed.");
                 return DisabledHub.Instance;
             }
 
-            var clonedScope = scope.Clone();
+            var clonedScope = scope.Key.Clone();
 
             if (state != null)
             {
                 clonedScope.Apply(state);
             }
-            var scopeSnapshot = new ScopeSnapshot(_options, currentScopeAndClientStack, this);
-            _options?.DiagnosticLogger?.LogDebug("New scope pushed.");
-            ScopeAndClientStack = currentScopeAndClientStack.Push(new Tuple<Scope, ISentryClient>(clonedScope, client));
 
+            var scopeSnapshot = new ScopeSnapshot(_options, currentScopeAndClientStack, this);
+
+            _options.DiagnosticLogger?.LogDebug("New scope pushed.");
+            var newScopeAndClientStack = new KeyValuePair<Scope, ISentryClient>[currentScopeAndClientStack.Length + 1];
+            Array.Copy(currentScopeAndClientStack, newScopeAndClientStack, currentScopeAndClientStack.Length);
+            newScopeAndClientStack[newScopeAndClientStack.Length - 1] = new KeyValuePair<Scope, ISentryClient>(clonedScope, scope.Value);
+
+            ScopeAndClientStack = newScopeAndClientStack;
             return scopeSnapshot;
         }
 
@@ -77,30 +86,32 @@ namespace Sentry.Internal
             using (PushScope())
             {
                 var scope = GetCurrent();
-                scopeCallback?.Invoke(scope.Item1);
+                scopeCallback.Invoke(scope.Key);
             }
         }
 
-        public void BindClient(ISentryClient client)
+        public void BindClient(ISentryClient? client)
         {
-            _options?.DiagnosticLogger?.LogDebug("Binding a new client to the current scope.");
+            _options.DiagnosticLogger?.LogDebug("Binding a new client to the current scope.");
 
             var currentScopeAndClientStack = ScopeAndClientStack;
-            currentScopeAndClientStack = currentScopeAndClientStack.Pop(out var top);
-            currentScopeAndClientStack = currentScopeAndClientStack.Push(
-                new Tuple<Scope, ISentryClient>(top.Item1, client ?? DisabledHub.Instance));
-            ScopeAndClientStack = currentScopeAndClientStack;
+            var top = currentScopeAndClientStack[currentScopeAndClientStack.Length - 1];
+
+            var newScopeAndClientStack = new KeyValuePair<Scope, ISentryClient>[currentScopeAndClientStack.Length];
+            Array.Copy(currentScopeAndClientStack, newScopeAndClientStack, currentScopeAndClientStack.Length);
+            newScopeAndClientStack[newScopeAndClientStack.Length - 1] = new KeyValuePair<Scope, ISentryClient>(top.Key, client ?? DisabledHub.Instance);
+            ScopeAndClientStack = newScopeAndClientStack;
         }
 
-        private class ScopeSnapshot : IDisposable
+        private sealed class ScopeSnapshot : IDisposable
         {
             private readonly SentryOptions _options;
-            private readonly ImmutableStack<Tuple<Scope, ISentryClient>> _snapshot;
+            private readonly KeyValuePair<Scope, ISentryClient>[] _snapshot;
             private readonly SentryScopeManager _scopeManager;
 
             public ScopeSnapshot(
                 SentryOptions options,
-                ImmutableStack<Tuple<Scope, ISentryClient>> snapshot,
+                KeyValuePair<Scope, ISentryClient>[] snapshot,
                 SentryScopeManager scopeManager)
             {
                 Debug.Assert(snapshot != null);
@@ -112,12 +123,15 @@ namespace Sentry.Internal
 
             public void Dispose()
             {
-                _options?.DiagnosticLogger?.LogDebug("Disposing scope.");
+                _options.DiagnosticLogger?.LogDebug("Disposing scope.");
+
+                var previousScopeKey = _snapshot[_snapshot.Length - 1].Key;
+                var currentScope = _scopeManager.ScopeAndClientStack;
 
                 // Only reset the parent if this is still the current scope
-                foreach (var (scope, _) in _scopeManager.ScopeAndClientStack)
+                for (var i = currentScope.Length - 1; i >= 0; --i)
                 {
-                    if (ReferenceEquals(scope, _snapshot.Peek().Item1))
+                    if (ReferenceEquals(currentScope[i].Key, previousScopeKey))
                     {
                         _scopeManager.ScopeAndClientStack = _snapshot;
                         break;
@@ -128,7 +142,7 @@ namespace Sentry.Internal
 
         public void Dispose()
         {
-            _options?.DiagnosticLogger?.LogDebug("Disposing SentryClient.");
+            _options.DiagnosticLogger?.LogDebug($"Disposing {nameof(SentryScopeManager)}.");
             _asyncLocalScope.Value = null;
         }
     }

@@ -20,7 +20,7 @@ namespace Sentry.Tests.Internals.Http
         {
             public SentryOptions SentryOptions { get; set; } = new SentryOptions
             {
-                Dsn = DsnSamples.Valid,
+                Dsn = DsnSamples.ValidDsnWithSecret,
                 DiagnosticLogger = Substitute.For<IDiagnosticLogger>()
             };
 
@@ -31,8 +31,8 @@ namespace Sentry.Tests.Internals.Http
 
             public Fixture()
             {
-                HttpMessageHandler.VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
-                    .Returns(_ => SentryResponses.GetOkResponse());
+                _ = HttpMessageHandler.VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
+                        .Returns(_ => SentryResponses.GetOkResponse());
 
                 HttpClient = new HttpClient(HttpMessageHandler);
             }
@@ -41,15 +41,6 @@ namespace Sentry.Tests.Internals.Http
         }
 
         private readonly Fixture _fixture = new Fixture();
-
-        [Fact]
-        public async Task CaptureEventAsync_NullEvent_NoOp()
-        {
-            var sut = _fixture.GetSut();
-            await sut.CaptureEventAsync(null);
-            await _fixture.HttpMessageHandler.DidNotReceive()
-                .VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>());
-        }
 
         [Fact]
         public async Task CaptureEventAsync_CancellationToken_PassedToClient()
@@ -64,9 +55,9 @@ namespace Sentry.Tests.Internals.Http
                     id: SentryResponses.ResponseId),
                 token);
 
-            await _fixture.HttpMessageHandler
-                .Received(1)
-                .VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Is<CancellationToken>(c => c.IsCancellationRequested));
+            _ = await _fixture.HttpMessageHandler
+                    .Received(1)
+                    .VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Is<CancellationToken>(c => c.IsCancellationRequested));
         }
 
         [Fact]
@@ -77,9 +68,9 @@ namespace Sentry.Tests.Internals.Http
             var expectedEvent = new SentryEvent();
 
             _fixture.SentryOptions.Debug = true;
-            _fixture.SentryOptions.DiagnosticLogger.IsEnabled(SentryLevel.Error).Returns(true);
-            _fixture.HttpMessageHandler.VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
-                .Returns(_ => SentryResponses.GetErrorResponse(expectedCode, expectedMessage));
+            _ = _fixture.SentryOptions.DiagnosticLogger.IsEnabled(SentryLevel.Error).Returns(true);
+            _ = _fixture.HttpMessageHandler.VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => SentryResponses.GetErrorResponse(expectedCode, expectedMessage));
 
             var sut = _fixture.GetSut();
 
@@ -99,9 +90,9 @@ namespace Sentry.Tests.Internals.Http
             var expectedEvent = new SentryEvent();
 
             _fixture.SentryOptions.Debug = true;
-            _fixture.SentryOptions.DiagnosticLogger.IsEnabled(SentryLevel.Error).Returns(true);
-            _fixture.HttpMessageHandler.VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
-                .Returns(_ => SentryResponses.GetErrorResponse(expectedCode, null));
+            _ = _fixture.SentryOptions.DiagnosticLogger.IsEnabled(SentryLevel.Error).Returns(true);
+            _ = _fixture.HttpMessageHandler.VerifyableSendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => SentryResponses.GetErrorResponse(expectedCode, null));
 
             var sut = _fixture.GetSut();
 
@@ -127,7 +118,7 @@ namespace Sentry.Tests.Internals.Http
             var sut = _fixture.GetSut();
 
             var evt = new SentryEvent();
-            sut.CreateRequest(evt);
+            _ = sut.CreateRequest(evt);
 
             Assert.True(callbackInvoked);
         }
@@ -151,7 +142,9 @@ namespace Sentry.Tests.Internals.Http
             var evt = new SentryEvent();
             var actual = sut.CreateRequest(evt);
 
-            Assert.Equal(_fixture.SentryOptions.Dsn.SentryUri, actual.RequestUri);
+            var uri = Dsn.Parse(_fixture.SentryOptions.Dsn!).GetStoreEndpointUri();
+
+            Assert.Equal(uri, actual.RequestUri);
         }
 
         [Fact]

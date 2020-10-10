@@ -3,6 +3,7 @@ using System.Linq;
 using NSubstitute;
 using Sentry.Extensibility;
 using Sentry.Internal;
+using Sentry.Protocol;
 using Xunit;
 
 namespace Sentry.Tests.Internals
@@ -17,17 +18,6 @@ namespace Sentry.Tests.Internals
         }
 
         private readonly Fixture _fixture = new Fixture();
-
-        [Fact]
-        public void Process_NullException_NoSentryException()
-        {
-            var sut = _fixture.GetSut();
-            var evt = new SentryEvent();
-            sut.Process(null, evt);
-
-            Assert.Null(evt.Exception);
-            Assert.Null(evt.SentryExceptionValues);
-        }
 
         [Fact]
         public void Process_ExceptionAndEventWithoutExtra_ExtraIsNull()
@@ -123,6 +113,34 @@ namespace Sentry.Tests.Internals
             Assert.Equal(2, evt.Extra.Count);
             Assert.Contains(evt.Extra, e => e.Key == "Exception[0][first]" && e.Value == firstValue);
             Assert.Contains(evt.Extra, e => e.Key == "Exception[1][second]" && e.Value == secondValue);
+        }
+
+        [Fact]
+        public void Process_ExceptionWithout_Handled()
+        {
+            var sut = _fixture.GetSut();
+            var evt = new SentryEvent();
+            var exp = new Exception();
+
+            sut.Process(exp, evt);
+            var x= evt.SentryExceptions.ToList();
+
+            _ = Assert.Single(evt.SentryExceptions.Where(p => p.Mechanism.Handled == null));
+        }
+
+        [Fact]
+        public void Process_ExceptionWith_HandledTrue()
+        {
+            var sut = _fixture.GetSut();
+            var evt = new SentryEvent();
+            var exp = new Exception();
+
+            exp.Data.Add(Mechanism.HandledKey, true);
+            exp.Data.Add(Mechanism.MechanismKey, "Process_ExceptionWith_HandledTrue");
+
+            sut.Process(exp, evt);
+
+            _ = Assert.Single(evt.SentryExceptions.Where(p => p.Mechanism.Handled == true));
         }
 
         [Fact]

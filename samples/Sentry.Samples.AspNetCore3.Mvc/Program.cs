@@ -1,16 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Sentry.Extensibility;
 
 namespace Sentry.Samples.AspNetCore3.Mvc
 {
-    public class Program
+    public static class Program
     {
         public static void Main(string[] args)
         {
@@ -25,7 +19,7 @@ namespace Sentry.Samples.AspNetCore3.Mvc
                     {
                         o.Debug = true;
                         o.MaxRequestBodySize = RequestSize.Always;
-                        o.Dsn = "https://5fd7a6cda8444965bade9ccfd3df9882@sentry.io/1188141";
+                        o.Dsn = "https://80aed643f81249d4bed3e30687b310ab@o447951.ingest.sentry.io/5428537";
                     });
                     webBuilder.UseStartup<Startup>();
                 });

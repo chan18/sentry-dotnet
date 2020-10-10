@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 using Sentry.Extensibility;
@@ -10,7 +11,9 @@ using Sentry.Protocol;
 
 namespace Sentry.AspNetCore
 {
-    ///
+    /// <summary>
+    /// Scope Extensions
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static class ScopeExtensions
     {
@@ -23,6 +26,14 @@ namespace Sentry.AspNetCore
         /// </remarks>
         public static void Populate(this Scope scope, HttpContext context, SentryAspNetCoreOptions options)
         {
+            // Not to throw on code that ignores nullability warnings.
+            // ReSharper disable ConditionIsAlwaysTrueOrFalse
+            if (scope is null || context is null || options is null)
+            {
+                return;
+            }
+            // ReSharper restore ConditionIsAlwaysTrueOrFalse
+
             // With the logger integration, a BeginScope call is made with RequestId. That ends up adding
             // two tags with the same value: RequestId and TraceIdentifier
             if (!scope.Tags.TryGetValue("RequestId", out var requestId) || requestId != context.TraceIdentifier)
@@ -30,12 +41,14 @@ namespace Sentry.AspNetCore
                 scope.SetTag(nameof(context.TraceIdentifier), context.TraceIdentifier);
             }
 
-            if (options?.SendDefaultPii == true && !scope.HasUser())
+            if (options.SendDefaultPii && !scope.HasUser())
             {
                 var userFactory = context.RequestServices?.GetService<IUserFactory>();
-                if (userFactory != null)
+                var user = userFactory?.Create(context);
+
+                if (user != null)
                 {
-                    scope.User = userFactory.Create(context);
+                    scope.User = user;
                 }
             }
 
@@ -45,13 +58,43 @@ namespace Sentry.AspNetCore
             }
             catch (Exception e)
             {
-                options?.DiagnosticLogger?.LogError("Failed to extract body.", e);
+                options.DiagnosticLogger?.LogError("Failed to extract body.", e);
             }
+
             SetEnv(scope, context, options);
 
-            // TODO: From MVC route template, ideally
-            // TODO: optionally get transaction from request through a dependency
-            //scope.Transation = context.Request.Path;
+            // Extract the route data
+            try
+            {
+                var routeData = context.GetRouteData();
+                if (routeData != null)
+                {
+                    var controller = routeData.Values["controller"]?.ToString();
+                    var action = routeData.Values["action"]?.ToString();
+                    var area = routeData.Values["area"]?.ToString();
+
+                    if (controller != null)
+                    {
+                        scope.SetTag("route.controller", controller);
+                    }
+                    if (action != null)
+                    {
+                        scope.SetTag("route.action", action);
+                    }
+                    if (area != null)
+                    {
+                        scope.SetTag("route.area", area);
+                    }
+
+                    scope.Transaction = area == null ? $"{controller}.{action}" : $"{area}.{controller}.{action}";
+                }
+            }
+            catch(Exception e)
+            {
+                // Suppress the error here; we expect an ArgumentNullException if httpContext.Request.RouteValues is null from GetRouteData()
+                // TODO: Consider adding a bool to the Sentry options to make route data extraction optional in case they don't use a routing middleware?
+                options.DiagnosticLogger?.LogDebug("Failed to extract route data.", e);
+            }
 
             // TODO: Get context stuff into scope
             //context.Session
@@ -65,13 +108,18 @@ namespace Sentry.AspNetCore
 
             // Logging integration, if enabled, sets the following tag which ends up as duplicate
             // to Request.Url. Prefer the interface value and remove tag.
-            scope.Request.Url = context.Request.Path;
+            var host = context.Request.Host.Host;
+            if (context.Request.Host.Port != null)
+            {
+                host += $":{context.Request.Host.Port}";
+            }
+            scope.Request.Url = $"{context.Request.Scheme}://{host}{context.Request.Path}";
             scope.UnsetTag("RequestPath");
 
             scope.Request.QueryString = context.Request.QueryString.ToString();
             foreach (var requestHeader in context.Request.Headers)
             {
-                if (options?.SendDefaultPii != true
+                if (!options.SendDefaultPii
                 // Don't add headers which might contain PII
                 && (requestHeader.Key == HeaderNames.Cookie
                     || requestHeader.Key == HeaderNames.Authorization))
@@ -84,8 +132,8 @@ namespace Sentry.AspNetCore
 
             // TODO: Hide these 'Env' behind some extension method as
             // these might be reported in a non CGI, old-school way
-            if (options?.SendDefaultPii == true
-                && context.Connection.RemoteIpAddress?.ToString() is string ipAddress)
+            if (options.SendDefaultPii
+                && context.Connection.RemoteIpAddress?.ToString() is { } ipAddress)
             {
                 scope.Request.Env["REMOTE_ADDR"] = ipAddress;
             }
@@ -101,11 +149,6 @@ namespace Sentry.AspNetCore
 
         private static void SetBody(BaseScope scope, HttpContext context, SentryAspNetCoreOptions options)
         {
-            if (context == null || scope == null || options == null)
-            {
-                return;
-            }
-
             var extractors = context.RequestServices.GetService<IEnumerable<IRequestPayloadExtractor>>();
             if (extractors == null)
             {
@@ -127,10 +170,13 @@ namespace Sentry.AspNetCore
         /// <param name="activity">The activity.</param>
         public static void Populate(this Scope scope, Activity activity)
         {
-            if (scope == null || activity == null)
+            // Not to throw on code that ignores nullability warnings.
+            // ReSharper disable ConditionIsAlwaysTrueOrFalse
+            if (scope is null || activity is null)
             {
                 return;
             }
+            // ReSharper restore ConditionIsAlwaysTrueOrFalse
 
             //scope.ActivityId = activity.Id;
 
@@ -140,10 +186,7 @@ namespace Sentry.AspNetCore
 
         internal static void SetWebRoot(this Scope scope, string webRoot)
         {
-            if (webRoot != null)
-            {
-                scope.Request.Env["DOCUMENT_ROOT"] = webRoot;
-            }
+            scope.Request.Env["DOCUMENT_ROOT"] = webRoot;
         }
     }
 }

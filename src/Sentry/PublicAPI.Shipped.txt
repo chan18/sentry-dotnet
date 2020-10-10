@@ -1,4 +1,4 @@
-﻿Sentry.DsnAttribute
+Sentry.DsnAttribute
 Sentry.DsnAttribute.Dsn.get -> string
 Sentry.DsnAttribute.DsnAttribute(string dsn) -> void
 Sentry.Extensibility.BaseRequestPayloadExtractor
@@ -122,6 +122,8 @@ Sentry.SentryOptions.BeforeBreadcrumb.get -> System.Func<Sentry.Protocol.Breadcr
 Sentry.SentryOptions.BeforeBreadcrumb.set -> void
 Sentry.SentryOptions.BeforeSend.get -> System.Func<Sentry.SentryEvent, Sentry.SentryEvent>
 Sentry.SentryOptions.BeforeSend.set -> void
+Sentry.SentryOptions.CreateHttpClientHandler.get -> System.Func<Sentry.Dsn, System.Net.Http.HttpClientHandler>
+Sentry.SentryOptions.CreateHttpClientHandler.set -> void
 Sentry.SentryOptions.ConfigureClient.get -> System.Action<System.Net.Http.HttpClient, Sentry.Dsn>
 Sentry.SentryOptions.ConfigureClient.set -> void
 Sentry.SentryOptions.ConfigureHandler.get -> System.Action<System.Net.Http.HttpClientHandler, Sentry.Dsn>
@@ -161,6 +163,8 @@ Sentry.SentryOptions.SampleRate.set -> void
 Sentry.SentryOptions.SendDefaultPii.get -> bool
 Sentry.SentryOptions.SendDefaultPii.set -> void
 Sentry.SentryOptions.SentryOptions() -> void
+Sentry.SentryOptions.ServerName.get -> string
+Sentry.SentryOptions.ServerName.set -> void
 Sentry.SentryOptions.ShutdownTimeout.get -> System.TimeSpan
 Sentry.SentryOptions.ShutdownTimeout.set -> void
 Sentry.SentryOptionsExtensions
@@ -225,6 +229,7 @@ static Sentry.SentrySdk.PushScope<TState>(TState state) -> System.IDisposable
 static Sentry.SentrySdk.WithScope(System.Action<Sentry.Scope> scopeCallback) -> void
 static readonly Sentry.Extensibility.HubAdapter.Instance -> Sentry.Extensibility.HubAdapter
 static readonly Sentry.Infrastructure.SystemClock.Clock -> Sentry.Infrastructure.SystemClock
+static Sentry.Reflection.AssemblyExtensions.GetNameAndVersion(this System.Reflection.Assembly asm) -> Sentry.Protocol.SdkVersion
 virtual Sentry.Extensibility.SentryStackTraceFactory.CreateFrame(System.Diagnostics.StackFrame stackFrame, bool isCurrentStackTrace) -> Sentry.Protocol.SentryStackFrame
 virtual Sentry.Extensibility.SentryStackTraceFactory.CreateStackTrace(System.Exception exception) -> System.Diagnostics.StackTrace
 virtual Sentry.Extensibility.SentryStackTraceFactory.GetMethod(System.Diagnostics.StackFrame stackFrame) -> System.Reflection.MethodBase

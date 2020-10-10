@@ -17,7 +17,7 @@ namespace Sentry.Internal
         private readonly int _maxItems;
         private int _currentItems;
 
-        private event EventHandler OnFlushObjectReceived;
+        private event EventHandler? OnFlushObjectReceived;
 
         internal Task WorkerTask { get; }
 
@@ -26,15 +26,15 @@ namespace Sentry.Internal
         public BackgroundWorker(
             ITransport transport,
             SentryOptions options)
-            : this(transport, options, null, null)
+            : this(transport, options, null)
         {
         }
 
         internal BackgroundWorker(
             ITransport transport,
             SentryOptions options,
-            CancellationTokenSource shutdownSource = null,
-            ConcurrentQueue<SentryEvent> queue = null)
+            CancellationTokenSource? shutdownSource = null,
+            ConcurrentQueue<SentryEvent>? queue = null)
         {
             Debug.Assert(transport != null);
             Debug.Assert(options != null);
@@ -57,7 +57,7 @@ namespace Sentry.Internal
                     .ConfigureAwait(false));
         }
 
-        public bool EnqueueEvent(SentryEvent @event)
+        public bool EnqueueEvent(SentryEvent? @event)
         {
             if (_disposed)
             {
@@ -71,12 +71,12 @@ namespace Sentry.Internal
 
             if (Interlocked.Increment(ref _currentItems) > _maxItems)
             {
-                Interlocked.Decrement(ref _currentItems);
+                _ = Interlocked.Decrement(ref _currentItems);
                 return false;
             }
 
             _queue.Enqueue(@event);
-            _queuedEventSemaphore.Release();
+            _ = _queuedEventSemaphore.Release();
             return true;
         }
 
@@ -146,8 +146,8 @@ namespace Sentry.Internal
                         }
                         finally
                         {
-                            queue.TryDequeue(out _);
-                            Interlocked.Decrement(ref _currentItems);
+                            _ = queue.TryDequeue(out _);
+                            _ = Interlocked.Decrement(ref _currentItems);
                             OnFlushObjectReceived?.Invoke(@event, EventArgs.Empty);
                         }
                     }
@@ -212,7 +212,8 @@ namespace Sentry.Internal
                     }
                     catch // Timeout or Shutdown might have been called so this token was disposed.
                     {
-                    } // Flush will release when timeout is hit.
+                        // Flush will release when timeout is hit.
+                    }
                 }
             }
 
@@ -225,7 +226,7 @@ namespace Sentry.Internal
                     return;
                 }
 
-                Interlocked.Exchange(ref depth, trackedDepth);
+                _ = Interlocked.Exchange(ref depth, trackedDepth);
                 _options.DiagnosticLogger?.LogDebug("Tracking depth: {0}.", trackedDepth);
 
                 if (counter >= depth) // When the worker finished flushing before we set the depth
@@ -272,7 +273,11 @@ namespace Sentry.Internal
 
                 // If there's anything in the queue, it'll keep running until 'shutdownTimeout' is reached
                 // If the queue is empty it will quit immediately
-                WorkerTask.Wait(_options.ShutdownTimeout);
+                _ = WorkerTask.Wait(_options.ShutdownTimeout);
+            }
+            catch (OperationCanceledException)
+            {
+                 _options.DiagnosticLogger?.LogDebug("Stopping the background worker due to a cancellation");
             }
             catch (Exception exception)
             {

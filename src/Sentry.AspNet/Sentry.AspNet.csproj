@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net461</TargetFramework>
+    <PackageId>Sentry.AspNet</PackageId>
+    <AssemblyName>Sentry.AspNet</AssemblyName>
+    <RootNamespace>Sentry.AspNet</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sentry\Sentry.csproj" />
+  </ItemGroup>
+  
+</Project>

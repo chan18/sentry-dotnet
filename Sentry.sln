@@ -17,7 +17,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{83263231-1
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sentry.Tests", "test\Sentry.Tests\Sentry.Tests.csproj", "{1E0F969B-67F9-4FCC-BCBF-596DB6460C7C}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "1 - Solution Items", "1 - Solution Items", "{9D7E2F87-D6F4-4BBB-8980-87D0A8344C74}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".root", ".root", "{9D7E2F87-D6F4-4BBB-8980-87D0A8344C74}"
 	ProjectSection(SolutionItems) = preProject
 		.appveyor.yml = .appveyor.yml
 		.editorconfig = .editorconfig
@@ -29,8 +29,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "1 - Solution Items", "1 - S
 		build.sh = build.sh
 		Directory.Build.props = Directory.Build.props
 		Directory.Build.targets = Directory.Build.targets
-		global.json = global.json
 		README.md = README.md
+		CHANGELOG.md = CHANGELOG.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{77454495-55EE-4B40-A089-71B9E8F82E89}"
@@ -88,6 +88,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sentry.Samples.NLog", "samples\Sentry.Samples.NLog\Sentry.Samples.NLog.csproj", "{DC90D63E-E4F3-40CB-AF6D-2EAEE5F619B7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sentry.Samples.AspNetCore3.Mvc", "samples\Sentry.Samples.AspNetCore3.Mvc\Sentry.Samples.AspNetCore3.Mvc.csproj", "{3CCB5D82-1D19-4FDE-B92D-CA726C418171}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sentry.AspNet", "src\Sentry.AspNet\Sentry.AspNet.csproj", "{22AA261A-F8B4-41E2-95DD-82632EED0AA5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sentry.AspNet.Tests", "test\Sentry.AspNet.Tests\Sentry.AspNet.Tests.csproj", "{0885DDFE-2FC7-4241-AEB1-8D6BDA627C0A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -195,6 +199,14 @@ Global
 		{3CCB5D82-1D19-4FDE-B92D-CA726C418171}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3CCB5D82-1D19-4FDE-B92D-CA726C418171}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3CCB5D82-1D19-4FDE-B92D-CA726C418171}.Release|Any CPU.Build.0 = Release|Any CPU
+		{22AA261A-F8B4-41E2-95DD-82632EED0AA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{22AA261A-F8B4-41E2-95DD-82632EED0AA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{22AA261A-F8B4-41E2-95DD-82632EED0AA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{22AA261A-F8B4-41E2-95DD-82632EED0AA5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0885DDFE-2FC7-4241-AEB1-8D6BDA627C0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0885DDFE-2FC7-4241-AEB1-8D6BDA627C0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0885DDFE-2FC7-4241-AEB1-8D6BDA627C0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0885DDFE-2FC7-4241-AEB1-8D6BDA627C0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -225,6 +237,8 @@ Global
 		{21A360C7-338F-4A9D-A9A3-83152D0C9303} = {83263231-1A2A-4733-B759-EEFF14E8C5D5}
 		{DC90D63E-E4F3-40CB-AF6D-2EAEE5F619B7} = {77454495-55EE-4B40-A089-71B9E8F82E89}
 		{3CCB5D82-1D19-4FDE-B92D-CA726C418171} = {77454495-55EE-4B40-A089-71B9E8F82E89}
+		{22AA261A-F8B4-41E2-95DD-82632EED0AA5} = {AF6AF4C7-8AA2-4D59-8064-2D79560904EB}
+		{0885DDFE-2FC7-4241-AEB1-8D6BDA627C0A} = {83263231-1A2A-4733-B759-EEFF14E8C5D5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0C652B1A-DF72-4EE5-A98B-194FE2C054F6}

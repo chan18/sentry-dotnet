@@ -21,8 +21,8 @@ namespace Sentry.Extensions.Logging.Tests
 
             public Fixture()
             {
-                Hub.IsEnabled.Returns(true);
-                Clock.GetUtcNow().Returns(DateTimeOffset.MaxValue);
+                _ = Hub.IsEnabled.Returns(true);
+                _ = Clock.GetUtcNow().Returns(DateTimeOffset.MaxValue);
                 Hub.ConfigureScope(Arg.Invoke(Scope));
             }
 
@@ -69,9 +69,9 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.Log<object>(LogLevel.Critical, expectedEventId, null, null, null);
 
-            _fixture.Hub.Received(1)
-                .CaptureEvent(Arg.Is<SentryEvent>(
-                    e => e.Tags[EventIdExtensions.DataKey] == expectedEventId.ToString()));
+            _ = _fixture.Hub.Received(1)
+                    .CaptureEvent(Arg.Is<SentryEvent>(
+                        e => e.Tags[EventIdExtensions.DataKey] == expectedEventId.ToString()));
         }
 
         [Fact]
@@ -85,9 +85,9 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.Log<object>(LogLevel.Critical, default, props, null, null);
 
-            _fixture.Hub.Received(1)
-                .CaptureEvent(Arg.Is<SentryEvent>(
-                    e => e.Tags["foo"] == "bar"));
+            _ = _fixture.Hub.Received(1)
+                    .CaptureEvent(Arg.Is<SentryEvent>(
+                        e => e.Tags["foo"] == "bar"));
         }
 
         [Fact]
@@ -120,8 +120,24 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.LogCritical(expected);
 
+            _ = _fixture.Hub.DidNotReceive()
+                    .CaptureEvent(Arg.Any<SentryEvent>());
+        }
+
+        [Fact]
+        public void LogCritical_MatchingFilter_DoesNotAddBreadcrumb()
+        {
+            const string expected = "message";
+            _fixture.Options.AddLogEntryFilter((_, __, ___, ____) => false);
+            _fixture.Options.AddLogEntryFilter((_, __, ___, ____) => true);
+
+            var sut = _fixture.GetSut();
+
+            sut.LogCritical(expected);
+
             _fixture.Hub.DidNotReceive()
-                .CaptureEvent(Arg.Any<SentryEvent>());
+                // Breadcrumbs live in the scope
+                .ConfigureScope(Arg.Any<Action<Scope>>());
         }
 
         [Fact]
@@ -135,8 +151,28 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.LogCritical(expected);
 
+            _ = _fixture.Hub.Received(1)
+                    .CaptureEvent(Arg.Any<SentryEvent>());
+        }
+
+        [Fact]
+        public void LogCritical_NotMatchingFilter_AddsBreadcrumb()
+        {
+            var scope = new Scope();
+            _fixture.Hub.ConfigureScope(Arg.Invoke(scope));
+
+            const string expected = "message";
+            _fixture.Options.AddLogEntryFilter((_, __, ___, ____) => false);
+            _fixture.Options.AddLogEntryFilter((_, __, ___, ____) => false);
+
+            var sut = _fixture.GetSut();
+
+            sut.LogCritical(expected);
+
             _fixture.Hub.Received(1)
-                .CaptureEvent(Arg.Any<SentryEvent>());
+                .ConfigureScope(Arg.Any<Action<Scope>>());
+
+            _ = Assert.Single(scope.Breadcrumbs);
         }
 
         [Fact]
@@ -147,8 +183,8 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.LogCritical(expected);
 
-            _fixture.Hub.Received(1)
-                .CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.Received(1)
+                    .CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         [Fact]
@@ -159,8 +195,8 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.LogError(expected);
 
-            _fixture.Hub.Received(1)
-                .CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.Received(1)
+                    .CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         [Fact]
@@ -172,8 +208,8 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.Log<object>(LogLevel.Critical, default, null, expectedException, null);
 
-            _fixture.Hub.DidNotReceive()
-                .CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.DidNotReceive()
+                    .CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         [Fact]
@@ -185,8 +221,8 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.Log<object>(LogLevel.Critical, default, null, expectedException, null);
 
-            _fixture.Hub.DidNotReceive()
-                .CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.DidNotReceive()
+                    .CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         // https://github.com/getsentry/sentry-dotnet/issues/132
@@ -199,8 +235,8 @@ namespace Sentry.Extensions.Logging.Tests
 
             sut.Log<object>(LogLevel.Critical, default, null, expectedException, null);
 
-            _fixture.Hub.Received(1)
-                .CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.Received(1)
+                    .CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         [Fact]
@@ -332,7 +368,7 @@ namespace Sentry.Extensions.Logging.Tests
         {
             var sut = _fixture.GetSut();
 
-            sut.LogDebug("antyhing");
+            sut.LogDebug("anything");
 
             _fixture.Hub.DidNotReceive()
                 .AddBreadcrumb(
@@ -349,7 +385,7 @@ namespace Sentry.Extensions.Logging.Tests
         {
             var sut = _fixture.GetSut();
 
-            sut.LogTrace("antyhing");
+            sut.LogTrace("anything");
 
             _fixture.Hub.DidNotReceive()
                 .AddBreadcrumb(
@@ -364,7 +400,7 @@ namespace Sentry.Extensions.Logging.Tests
         [Fact]
         public void IsEnabled_DisabledSdk_ReturnsFalse()
         {
-            _fixture.Hub.IsEnabled.Returns(false);
+            _ = _fixture.Hub.IsEnabled.Returns(false);
 
             var sut = _fixture.GetSut();
 
@@ -374,7 +410,7 @@ namespace Sentry.Extensions.Logging.Tests
         [Fact]
         public void IsEnabled_EnabledSdk_ReturnsTrue()
         {
-            _fixture.Hub.IsEnabled.Returns(true);
+            _ = _fixture.Hub.IsEnabled.Returns(true);
 
             var sut = _fixture.GetSut();
 
@@ -384,7 +420,7 @@ namespace Sentry.Extensions.Logging.Tests
         [Fact]
         public void IsEnabled_EnabledSdkLogLevelNone_ReturnsFalse()
         {
-            _fixture.Hub.IsEnabled.Returns(true);
+            _ = _fixture.Hub.IsEnabled.Returns(true);
 
             var sut = _fixture.GetSut();
 
@@ -396,7 +432,7 @@ namespace Sentry.Extensions.Logging.Tests
         {
             _fixture.Options.MinimumBreadcrumbLevel = LogLevel.Critical;
             _fixture.Options.MinimumEventLevel = LogLevel.Critical;
-            _fixture.Hub.IsEnabled.Returns(true);
+            _ = _fixture.Hub.IsEnabled.Returns(true);
 
             var sut = _fixture.GetSut();
 
@@ -408,7 +444,7 @@ namespace Sentry.Extensions.Logging.Tests
         {
             _fixture.Options.MinimumBreadcrumbLevel = LogLevel.Critical;
             _fixture.Options.MinimumEventLevel = LogLevel.Trace;
-            _fixture.Hub.IsEnabled.Returns(true);
+            _ = _fixture.Hub.IsEnabled.Returns(true);
 
             var sut = _fixture.GetSut();
 
@@ -420,7 +456,7 @@ namespace Sentry.Extensions.Logging.Tests
         {
             _fixture.Options.MinimumBreadcrumbLevel = LogLevel.Trace;
             _fixture.Options.MinimumEventLevel = LogLevel.Critical;
-            _fixture.Hub.IsEnabled.Returns(true);
+            _ = _fixture.Hub.IsEnabled.Returns(true);
 
             var sut = _fixture.GetSut();
 
@@ -431,8 +467,8 @@ namespace Sentry.Extensions.Logging.Tests
         public void BeginScope_NullState_PushesScope()
         {
             var sut = _fixture.GetSut();
-            sut.BeginScope<object>(null);
-            _fixture.Hub.Received(1).PushScope<object>(null);
+            _ = sut.BeginScope<object>(null);
+            _ = _fixture.Hub.Received(1).PushScope<object>(null);
         }
 
         [Fact]
@@ -440,15 +476,15 @@ namespace Sentry.Extensions.Logging.Tests
         {
             const string expected = "state";
             var sut = _fixture.GetSut();
-            sut.BeginScope(expected);
-            _fixture.Hub.Received(1).PushScope(expected);
+            _ = sut.BeginScope(expected);
+            _ = _fixture.Hub.Received(1).PushScope(expected);
         }
 
         [Fact]
         public void BeginScope_Disposable_Scope()
         {
             var expected = Substitute.For<IDisposable>();
-            _fixture.Hub.PushScope(Arg.Any<string>()).Returns(expected);
+            _ = _fixture.Hub.PushScope(Arg.Any<string>()).Returns(expected);
 
             var sut = _fixture.GetSut();
             var actual = sut.BeginScope("state");

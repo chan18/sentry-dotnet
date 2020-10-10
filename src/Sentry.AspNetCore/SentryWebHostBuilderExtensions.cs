@@ -21,7 +21,7 @@ namespace Microsoft.AspNetCore.Hosting
         /// <param name="builder">The builder.</param>
         /// <returns></returns>
         public static IWebHostBuilder UseSentry(this IWebHostBuilder builder)
-            => UseSentry(builder, (Action<SentryAspNetCoreOptions>)null);
+            => UseSentry(builder, (Action<SentryAspNetCoreOptions>?)null);
 
         /// <summary>
         /// Uses Sentry integration.
@@ -40,7 +40,7 @@ namespace Microsoft.AspNetCore.Hosting
         /// <returns></returns>
         public static IWebHostBuilder UseSentry(
             this IWebHostBuilder builder,
-            Action<SentryAspNetCoreOptions> configureOptions)
+            Action<SentryAspNetCoreOptions>? configureOptions)
             => builder.UseSentry((context, options) => configureOptions?.Invoke(options));
 
         /// <summary>
@@ -51,40 +51,37 @@ namespace Microsoft.AspNetCore.Hosting
         /// <returns></returns>
         public static IWebHostBuilder UseSentry(
             this IWebHostBuilder builder,
-            Action<WebHostBuilderContext, SentryAspNetCoreOptions> configureOptions)
+            Action<WebHostBuilderContext, SentryAspNetCoreOptions>? configureOptions)
         {
             // The earliest we can hook the SDK initialization code with the framework
             // Initialization happens at a later time depending if the default MEL backend is enabled or not.
             // In case the logging backend was replaced, init happens later, at the StartupFilter
-            builder.ConfigureLogging((context, logging) =>
+            _ = builder.ConfigureLogging((context, logging) =>
             {
                 logging.AddConfiguration();
 
                 var section = context.Configuration.GetSection("Sentry");
-                logging.Services.Configure<SentryAspNetCoreOptions>(section);
+                _ = logging.Services.Configure<SentryAspNetCoreOptions>(section);
 
                 if (configureOptions != null)
                 {
-                    logging.Services.Configure<SentryAspNetCoreOptions>(options =>
+                    _ = logging.Services.Configure<SentryAspNetCoreOptions>(options =>
                     {
                         configureOptions(context, options);
                     });
                 }
 
-                logging.Services.AddSingleton<IConfigureOptions<SentryAspNetCoreOptions>, SentryAspNetCoreOptionsSetup>();
-                logging.Services.AddSingleton<ILoggerProvider, SentryAspNetCoreLoggerProvider>();
+                _ = logging.Services.AddSingleton<IConfigureOptions<SentryAspNetCoreOptions>, SentryAspNetCoreOptionsSetup>();
+                _ = logging.Services.AddSingleton<ILoggerProvider, SentryAspNetCoreLoggerProvider>();
 
-                logging.AddFilter<SentryAspNetCoreLoggerProvider>(
+                _ = logging.AddFilter<SentryAspNetCoreLoggerProvider>(
                     "Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware",
                     LogLevel.None);
 
-                logging.Services.AddSentry();
+                _ = logging.Services.AddSentry();
             });
 
-            builder.ConfigureServices(c =>
-            {
-                c.AddTransient<IStartupFilter, SentryStartupFilter>();
-            });
+            _ = builder.ConfigureServices(c => _ = c.AddTransient<IStartupFilter, SentryStartupFilter>());
 
             return builder;
         }

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1;netstandard2.0;net461</TargetFrameworks>
     <PackageId>Sentry</PackageId>
     <AssemblyName>Sentry</AssemblyName>
     <RootNamespace>Sentry</RootNamespace>
@@ -9,17 +9,26 @@
     <NoWarn Condition="$(TargetFramework) == 'netstandard2.0'">$(NoWarn);RS0017</NoWarn>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-    <PackageReference Include="Newtonsoft.Json" Version="6.0.8" />
-    <Reference Include="System.Web" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'netstandard2.1'">
+    <DefineConstants>HAS_VALUE_TUPLE;$(AdditionalConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(TargetFramework.StartsWith('netstandard'))">
+    <DefineConstants>NETSTANDARD;$(AdditionalConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
+    <DefineConstants>NETFX;$(AdditionalConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net461'">
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Sentry.PlatformAbstractions" Version="1.1.0-beta" />
-    <PackageReference Include="Sentry.Protocol" Version="2.0.0-beta2" />
-    <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
+    <PackageReference Include="Newtonsoft.Json" Version="6.0.8" />
+    <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" Version="4.3.0" />
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 
 </Project>

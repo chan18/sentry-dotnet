@@ -1,4 +1,3 @@
-#if SYSTEM_WEB
 using System;
 using System.IO;
 using System.Web;
@@ -20,7 +19,7 @@ namespace Sentry.Tests.Internals.Web
 
             public Fixture()
             {
-                RequestPayloadExtractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns(MockBody);
+                _ = RequestPayloadExtractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns(MockBody);
                 HttpContext = new HttpContext(new HttpRequest("test", "http://test", null), new HttpResponse(new StringWriter()));
             }
 
@@ -37,7 +36,7 @@ namespace Sentry.Tests.Internals.Web
         public void Ctor_NullEvent_ThrowsArgumentNullException()
         {
             _fixture.RequestPayloadExtractor = null;
-            Assert.Throws<ArgumentNullException>(() => _fixture.GetSut());
+            _ = Assert.Throws<ArgumentNullException>(() => _fixture.GetSut());
         }
 
         [Fact]
@@ -71,7 +70,7 @@ namespace Sentry.Tests.Internals.Web
         [Fact]
         public void Process_NoBodyExtracted_NoRequestData()
         {
-            _fixture.RequestPayloadExtractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns(null);
+            _ = _fixture.RequestPayloadExtractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns(null);
             var expected = new SentryEvent();
 
             var sut = _fixture.GetSut();
@@ -82,4 +81,3 @@ namespace Sentry.Tests.Internals.Web
         }
     }
 }
-#endif

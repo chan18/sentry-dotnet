@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -15,8 +16,9 @@ namespace Sentry.Internal
 {
     internal class MainSentryEventProcessor : ISentryEventProcessor
     {
-        private readonly Lazy<string> _release = new Lazy<string>(ReleaseLocator.GetCurrent);
-        private readonly Lazy<Runtime> _runtime = new Lazy<Runtime>(() =>
+        private readonly Lazy<string?> _release = new Lazy<string?>(ReleaseLocator.GetCurrent);
+
+        private readonly Lazy<Runtime?> _runtime = new Lazy<Runtime?>(() =>
         {
             var current = PlatformAbstractions.Runtime.Current;
             return current != null
@@ -37,8 +39,8 @@ namespace Sentry.Internal
         private readonly SentryOptions _options;
         internal Func<ISentryStackTraceFactory> SentryStackTraceFactoryAccessor { get; }
 
-        internal string Release => _release.Value;
-        internal Runtime Runtime => _runtime.Value;
+        internal string? Release => _release.Value;
+        internal Runtime? Runtime => _runtime.Value;
 
         public MainSentryEventProcessor(
             SentryOptions options,
@@ -54,7 +56,7 @@ namespace Sentry.Internal
         {
             _options.DiagnosticLogger?.LogDebug("Running main event processor on: Event {0}", @event.EventId);
 
-            if (!@event.Contexts.ContainsKey(Runtime.Type))
+            if (!@event.Contexts.ContainsKey(Runtime.Type) && Runtime != null)
             {
                 @event.Contexts[Runtime.Type] = Runtime;
             }
@@ -68,27 +70,60 @@ namespace Sentry.Internal
                 }
             }
 
-            @event.Platform = Protocol.Constants.Platform;
-
-            // SDK Name/Version might have be already set by an outer package
-            // e.g: ASP.NET Core can set itself as the SDK
-            if (@event.Sdk.Version == null && @event.Sdk.Name == null)
+            if (TimeZoneInfo.Local is { } timeZoneInfo)
             {
-                @event.Sdk.Name = Constants.SdkName;
-                @event.Sdk.Version = NameAndVersion.Version;
+                @event.Contexts.Device.Timezone = timeZoneInfo;
             }
 
-            @event.Sdk.AddPackage(ProtocolPackageName, NameAndVersion.Version);
+            const string currentUiCultureKey = "CurrentUICulture";
+            if (!@event.Contexts.ContainsKey(currentUiCultureKey)
+                && CultureInfoToDictionary(CultureInfo.CurrentUICulture) is { } currentUiCultureMap)
+            {
+                @event.Contexts[currentUiCultureKey] = currentUiCultureMap;
+            }
+
+            const string cultureInfoKey = "CurrentCulture";
+            if (!@event.Contexts.ContainsKey(cultureInfoKey)
+                && CultureInfoToDictionary(CultureInfo.CurrentCulture) is { } currentCultureMap)
+            {
+                @event.Contexts[cultureInfoKey] = currentCultureMap;
+            }
+
+            @event.Platform = Protocol.Constants.Platform;
+
+            if (@event.Sdk != null)
+            {
+                // SDK Name/Version might have be already set by an outer package
+                // e.g: ASP.NET Core can set itself as the SDK
+                if (@event.Sdk.Version == null && @event.Sdk.Name == null)
+                {
+                    @event.Sdk.Name = Constants.SdkName;
+                    @event.Sdk.Version = NameAndVersion.Version;
+                }
+
+                if (NameAndVersion.Version != null)
+                {
+                    @event.Sdk.AddPackage(ProtocolPackageName, NameAndVersion.Version);
+                }
+            }
 
             // Report local user if opt-in PII, no user was already set to event and feature not opted-out:
             if (_options.SendDefaultPii && _options.IsEnvironmentUser && !@event.HasUser())
             {
-                @event.User.Username = System.Environment.UserName;
+                @event.User.Username = Environment.UserName;
             }
 
-            if (@event.ServerName == null && _options.SendDefaultPii)
+            if (@event.ServerName == null)
             {
-                @event.ServerName = System.Environment.MachineName;
+                // Value set on the options take precedence over device name.
+                if (!string.IsNullOrEmpty(_options.ServerName))
+                {
+                    @event.ServerName = _options.ServerName;
+                }
+                else if (_options.SendDefaultPii)
+                {
+                    @event.ServerName = Environment.MachineName;
+                }
             }
 
             if (@event.Level == null)
@@ -120,9 +155,9 @@ namespace Sentry.Internal
                         Stacktrace = stackTrace
                     };
 
-                    @event.SentryThreads = @event.SentryThreads.Any()
+                    @event.SentryThreads = @event.SentryThreads?.Any() == true
                         ? new List<SentryThread>(@event.SentryThreads) { thread }
-                        : new[] { thread } as IEnumerable<SentryThread>;
+                        : new[] { thread }.AsEnumerable();
                 }
             }
 
@@ -139,7 +174,28 @@ namespace Sentry.Internal
                     @event.Modules[asmName.Name] = asmName.Version.ToString();
                 }
             }
+
             return @event;
+        }
+
+        private static IDictionary<string, string>? CultureInfoToDictionary(CultureInfo cultureInfo)
+        {
+            var dic = new Dictionary<string, string>();
+
+            if (!string.IsNullOrWhiteSpace(cultureInfo.Name))
+            {
+                dic.Add("Name", cultureInfo.Name);
+            }
+            if (!string.IsNullOrWhiteSpace(cultureInfo.DisplayName))
+            {
+                dic.Add("DisplayName", cultureInfo.DisplayName);
+            }
+            if (cultureInfo.Calendar is { } cal)
+            {
+                dic.Add("Calendar", cal.GetType().Name);
+            }
+
+            return dic.Count > 0 ? dic : null;
         }
     }
 }

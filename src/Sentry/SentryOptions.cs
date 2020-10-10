@@ -1,16 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using Sentry.Extensibility;
 using Sentry.Http;
 using Sentry.Integrations;
 using Sentry.Internal;
-#if SYSTEM_WEB
-using Sentry.Internal.Web;
-#endif
 using Sentry.Protocol;
 using static Sentry.Internal.Constants;
 using static Sentry.Protocol.Constants;
@@ -23,7 +20,7 @@ namespace Sentry
     public class SentryOptions : IScopeOptions
     {
         private readonly Func<ISentryStackTraceFactory> _sentryStackTraceFactoryAccessor;
-        internal ISentryStackTraceFactory SentryStackTraceFactory { get; set; }
+        internal ISentryStackTraceFactory? SentryStackTraceFactory { get; set; }
 
         internal string ClientVersion { get; } = SdkName;
 
@@ -32,31 +29,33 @@ namespace Sentry
         /// <summary>
         /// A list of exception processors
         /// </summary>
-        internal ImmutableList<ISentryEventExceptionProcessor> ExceptionProcessors { get; set; }
+        internal ISentryEventExceptionProcessor[]? ExceptionProcessors { get; set; }
 
         /// <summary>
         /// A list of event processors
         /// </summary>
-        internal ImmutableList<ISentryEventProcessor> EventProcessors { get; set; }
+        internal ISentryEventProcessor[]? EventProcessors { get; set; }
 
         /// <summary>
         /// A list of providers of <see cref="ISentryEventProcessor"/>
         /// </summary>
-        internal ImmutableList<Func<IEnumerable<ISentryEventProcessor>>> EventProcessorsProviders { get; set; }
+        internal Func<IEnumerable<ISentryEventProcessor>>[]? EventProcessorsProviders { get; set; }
 
         /// <summary>
         /// A list of providers of <see cref="ISentryEventExceptionProcessor"/>
         /// </summary>
-        internal ImmutableList<Func<IEnumerable<ISentryEventExceptionProcessor>>> ExceptionProcessorsProviders { get; set; }
+        internal Func<IEnumerable<ISentryEventExceptionProcessor>>[]? ExceptionProcessorsProviders { get; set; }
 
         /// <summary>
-        /// A list of integrations to be added when the SDK is initialized
+        /// A list of integrations to be added when the SDK is initialized.
         /// </summary>
-        internal ImmutableList<ISdkIntegration> Integrations { get; set; }
+        internal ISdkIntegration[]? Integrations { get; set; }
 
-        internal IBackgroundWorker BackgroundWorker { get; set; }
+        internal IExceptionFilter[]? ExceptionFilters { get; set; } = Array.Empty<IExceptionFilter>();
 
-        internal ISentryHttpClientFactory SentryHttpClientFactory { get; set; }
+        internal IBackgroundWorker? BackgroundWorker { get; set; }
+
+        internal ISentryHttpClientFactory? SentryHttpClientFactory { get; set; }
 
         /// <summary>
         /// A list of namespaces (or prefixes) considered not part of application code
@@ -69,7 +68,7 @@ namespace Sentry
         /// <example>
         /// 'System.', 'Microsoft.'
         /// </example>
-        internal ImmutableList<string> InAppExclude { get; set; }
+        internal string[]? InAppExclude { get; set; }
 
         /// <summary>
         /// A list of namespaces (or prefixes) considered part of application code
@@ -83,7 +82,7 @@ namespace Sentry
         /// 'System.CustomNamespace', 'Microsoft.Azure.App'
         /// </example>
         /// <seealso href="https://docs.sentry.io/error-reporting/configuration/?platform=csharp#in-app-include"/>
-        internal ImmutableList<string> InAppInclude { get; set; }
+        internal string[]? InAppInclude { get; set; }
 
         /// <summary>
         /// Whether to include default Personal Identifiable information
@@ -103,6 +102,16 @@ namespace Sentry
         /// In environments like server applications this is set to false in order to not report server account names as user names.
         /// </remarks>
         public bool IsEnvironmentUser { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the name of the server running the application.
+        /// </summary>
+        /// <remarks>
+        /// When <see cref="SendDefaultPii"/> is set to <c>true</c>, <see cref="System.Environment.MachineName"/> is
+        /// automatically set as ServerName. This property can serve as an override.
+        /// This is relevant only to server applications.
+        /// </remarks>
+        public string? ServerName { get; set; }
 
         /// <summary>
         /// Whether to send the stack trace of a event captured without an exception
@@ -135,6 +144,7 @@ namespace Sentry
         /// </example>
         /// <see href="https://docs.sentry.io/clientdev/features/#event-sampling"/>
         private float? _sampleRate;
+
         /// <summary>
         /// The optional sample rate.
         /// </summary>
@@ -160,16 +170,19 @@ namespace Sentry
         /// 14.1.16.32451
         /// </example>
         /// <remarks>
+        /// <para>
         /// This value will generally be something along the lines of the git SHA for the given project.
         /// If not explicitly defined via configuration or environment variable (SENTRY_RELEASE).
         /// It will attempt o read it from:
         /// <see cref="System.Reflection.AssemblyInformationalVersionAttribute"/>
-        ///
+        /// </para>
+        /// <para>
         /// Don't rely on discovery if your release is: '1.0.0' or '0.0.0'. Since those are
         /// default values for new projects, they are not considered valid by the discovery process.
+        /// </para>
         /// </remarks>
         /// <seealso href="https://docs.sentry.io/learn/releases/"/>
-        public string Release { get; set; }
+        public string? Release { get; set; }
 
         /// <summary>
         /// The environment the application is running
@@ -183,12 +196,12 @@ namespace Sentry
         /// Production, Staging
         /// </example>
         /// <seealso href="https://docs.sentry.io/learn/environments/"/>
-        public string Environment { get; set; }
+        public string? Environment { get; set; }
 
         /// <summary>
         /// The Data Source Name of a given project in Sentry.
         /// </summary>
-        public Dsn Dsn { get; set; }
+        public string? Dsn { get; set; }
 
         /// <summary>
         /// A callback to invoke before sending an event to Sentry
@@ -198,7 +211,7 @@ namespace Sentry
         /// a chance to inspect and/or modify the event before it's sent. If the event
         /// should not be sent at all, return null from the callback.
         /// </remarks>
-        public Func<SentryEvent, SentryEvent> BeforeSend { get; set; }
+        public Func<SentryEvent, SentryEvent>? BeforeSend { get; set; }
 
         /// <summary>
         /// A callback invoked when a breadcrumb is about to be stored.
@@ -206,9 +219,10 @@ namespace Sentry
         /// <remarks>
         /// Gives a chance to inspect and modify/reject a breadcrumb.
         /// </remarks>
-        public Func<Breadcrumb, Breadcrumb> BeforeBreadcrumb { get; set; }
+        public Func<Breadcrumb, Breadcrumb>? BeforeBreadcrumb { get; set; }
 
         private int _maxQueueItems = 30;
+
         /// <summary>
         /// The maximum number of events to keep while the worker attempts to send them
         /// </summary>
@@ -271,17 +285,17 @@ namespace Sentry
         /// <summary>
         /// An optional web proxy
         /// </summary>
-        public IWebProxy HttpProxy { get; set; }
+        public IWebProxy? HttpProxy { get; set; }
+
+        /// <summary>
+        /// Creates the inner most <see cref="HttpClientHandler"/>.
+        /// </summary>
+        public Func<HttpClientHandler>? CreateHttpClientHandler { get; set; }
 
         /// <summary>
         /// A callback invoked when a <see cref="SentryClient"/> is created.
         /// </summary>
-        public Action<HttpClientHandler, Dsn> ConfigureHandler { get; set; }
-
-        /// <summary>
-        /// A callback invoked when a <see cref="SentryClient"/> is created.
-        /// </summary>
-        public Action<HttpClient, Dsn> ConfigureClient { get; set; }
+        public Action<HttpClient>? ConfigureClient { get; set; }
 
         private volatile bool _debug;
 
@@ -306,7 +320,8 @@ namespace Sentry
         /// </remarks>
         public SentryLevel DiagnosticsLevel { get; set; } = SentryLevel.Debug;
 
-        private volatile IDiagnosticLogger _diagnosticLogger;
+        private volatile IDiagnosticLogger? _diagnosticLogger;
+
         /// <summary>
         /// The implementation of the logger.
         /// </summary>
@@ -314,12 +329,20 @@ namespace Sentry
         /// The <see cref="Debug"/> flag has to be switched on for this logger to be used at all.
         /// When debugging is turned off, this property is made null and any internal logging results in a no-op.
         /// </remarks>
-        public IDiagnosticLogger DiagnosticLogger
+        public IDiagnosticLogger? DiagnosticLogger
         {
             get => Debug ? _diagnosticLogger : null;
             set
             {
-                _diagnosticLogger?.LogInfo("Replacing current logger with: '{0}'.", value?.GetType().Name);
+                if (value is null)
+                {
+                    _diagnosticLogger?.LogDebug("Sentry will not emit SDK debug messages because debug mode has been turned off.");
+                }
+                else
+                {
+                    _diagnosticLogger?.LogInfo("Replacing current logger with: '{0}'.", value.GetType().Name);
+                }
+
                 _diagnosticLogger = value;
             }
         }
@@ -329,64 +352,46 @@ namespace Sentry
         /// </summary>
         public bool ReportAssemblies { get; set; } = true;
 
-#if SYSTEM_WEB
         /// <summary>
-        /// Max request body to be captured when a Web request exists on a ASP.NET Application.
+        /// What modes to use for event automatic deduplication
         /// </summary>
         /// <remarks>
-        /// This configuration is visible to any .NET Framework application but is only relevant when running ASP.NET.
-        /// When set to a value other than 'None', the body from `HttpContext.Current.Request` is read when available.
+        /// By default will not drop an event solely for including an inner exception that was already captured.
         /// </remarks>
-        public RequestSize MaxRequestBodySize { get; set; }
-#endif
+        public DeduplicateMode DeduplicateMode { get; set; } = DeduplicateMode.All ^ DeduplicateMode.InnerException;
 
         /// <summary>
         /// Creates a new instance of <see cref="SentryOptions"/>
         /// </summary>
         public SentryOptions()
         {
-            EventProcessorsProviders
-                = ImmutableList.Create<Func<IEnumerable<ISentryEventProcessor>>>(
-                    () => EventProcessors);
+            EventProcessorsProviders = new Func<IEnumerable<ISentryEventProcessor>>[] {
+                () => EventProcessors ?? Enumerable.Empty<ISentryEventProcessor>()
+            };
 
-            ExceptionProcessorsProviders
-                = ImmutableList.Create<Func<IEnumerable<ISentryEventExceptionProcessor>>>(
-                    () => ExceptionProcessors);
+            ExceptionProcessorsProviders = new Func<IEnumerable<ISentryEventExceptionProcessor>>[] {
+                () => ExceptionProcessors ?? Enumerable.Empty<ISentryEventExceptionProcessor>()
+            };
 
             SentryStackTraceFactory = new SentryStackTraceFactory(this);
             _sentryStackTraceFactoryAccessor = () => SentryStackTraceFactory;
 
-            EventProcessors
-                = ImmutableList.Create<ISentryEventProcessor>(
+            EventProcessors = new ISentryEventProcessor[] {
                     // de-dupe to be the first to run
                     new DuplicateEventDetectionEventProcessor(this),
-                    new MainSentryEventProcessor(this, _sentryStackTraceFactoryAccessor));
+                    new MainSentryEventProcessor(this, _sentryStackTraceFactoryAccessor),
+            };
 
-#if SYSTEM_WEB
-            EventProcessors = EventProcessors.Add(
-                new SystemWebRequestEventProcessor(
-                    new RequestBodyExtractionDispatcher(
-                        new IRequestPayloadExtractor[]
-                        {
-                                new FormRequestPayloadExtractor(),
-                                new DefaultRequestPayloadExtractor()
-                        },
-                        this,
-                        () => MaxRequestBodySize),
-                    this));
-#endif
+            ExceptionProcessors = new ISentryEventExceptionProcessor[] {
+                new MainExceptionProcessor(this, _sentryStackTraceFactoryAccessor)
+            };
 
-            ExceptionProcessors
-                = ImmutableList.Create<ISentryEventExceptionProcessor>(
-                    new MainExceptionProcessor(this, _sentryStackTraceFactoryAccessor));
+            Integrations = new ISdkIntegration[] {
+                new AppDomainUnhandledExceptionIntegration(),
+                new AppDomainProcessExitIntegration(),
+            };
 
-            Integrations
-                = ImmutableList.Create<ISdkIntegration>(
-                    new AppDomainUnhandledExceptionIntegration(),
-                    new AppDomainProcessExitIntegration());
-
-            InAppExclude
-                = ImmutableList.Create(
+            InAppExclude = new[] {
                     "System.",
                     "Sentry.",
                     "Microsoft.",
@@ -395,9 +400,10 @@ namespace Sentry
                     "FSharp.",
                     "Serilog",
                     "Giraffe.",
-                    "NLog");
+                    "NLog",
+            };
 
-            InAppInclude = ImmutableList<string>.Empty;
+            InAppInclude = Array.Empty<string>();
         }
     }
 }

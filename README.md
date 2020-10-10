@@ -7,10 +7,12 @@
 
 Sentry SDK for .NET 
 ===========
-[![Travis](https://travis-ci.org/getsentry/sentry-dotnet.svg?branch=master)](https://travis-ci.org/getsentry/sentry-dotnet)
-[![AppVeyor](https://ci.appveyor.com/api/projects/status/wu055n0n4u8p20p2/branch/master?svg=true)](https://ci.appveyor.com/project/sentry/sentry-dotnet/branch/master)
-[![Tests](https://img.shields.io/appveyor/tests/sentry/sentry-dotnet/master?compact_message)](https://ci.appveyor.com/project/sentry/sentry-dotnet/branch/master/tests)
-[![codecov](https://codecov.io/gh/getsentry/sentry-dotnet/branch/master/graph/badge.svg)](https://codecov.io/gh/getsentry/sentry-dotnet)
+
+[![build](https://github.com/getsentry/sentry-dotnet/workflows/build/badge.svg?branch=main)](https://github.com/getsentry/sentry-dotnet/actions?query=branch%3Amain)
+[![Travis](https://travis-ci.org/getsentry/sentry-dotnet.svg?branch=main)](https://travis-ci.org/getsentry/sentry-dotnet)
+[![AppVeyor](https://ci.appveyor.com/api/projects/status/wu055n0n4u8p20p2/branch/main?svg=true)](https://ci.appveyor.com/project/sentry/sentry-dotnet/branch/main)
+[![Tests](https://img.shields.io/appveyor/tests/sentry/sentry-dotnet/main?compact_message)](https://ci.appveyor.com/project/sentry/sentry-dotnet/branch/main/tests)
+[![codecov](https://codecov.io/gh/getsentry/sentry-dotnet/branch/main/graph/badge.svg)](https://codecov.io/gh/getsentry/sentry-dotnet)
 [![Discord Chat](https://img.shields.io/discord/621778831602221064.svg)](https://discord.gg/Ww9hbqr)  
 
 
@@ -19,6 +21,7 @@ Sentry SDK for .NET
 |         **Sentry**            | [![Downloads](https://img.shields.io/nuget/dt/Sentry.svg)](https://www.nuget.org/packages/Sentry) | [![NuGet](https://img.shields.io/nuget/v/Sentry.svg)](https://www.nuget.org/packages/Sentry)   |    [![NuGet](https://img.shields.io/nuget/vpre/Sentry.svg)](https://www.nuget.org/packages/Sentry)   |
 | **Sentry.Extensions.Logging** | [![Downloads](https://img.shields.io/nuget/dt/Sentry.Extensions.Logging.svg)](https://www.nuget.org/packages/Sentry.Extensions.Logging) | [![NuGet](https://img.shields.io/nuget/v/Sentry.Extensions.Logging.svg)](https://www.nuget.org/packages/Sentry.Extensions.Logging)   | [![NuGet](https://img.shields.io/nuget/vpre/Sentry.Extensions.Logging.svg)](https://www.nuget.org/packages/Sentry.Extensions.Logging)   |
 |     **Sentry.AspNetCore**     | [![Downloads](https://img.shields.io/nuget/dt/Sentry.AspNetCore.svg)](https://www.nuget.org/packages/Sentry.AspNetCore) | [![NuGet](https://img.shields.io/nuget/v/Sentry.AspNetCore.svg)](https://www.nuget.org/packages/Sentry.AspNetCore)   |   [![NuGet](https://img.shields.io/nuget/vpre/Sentry.AspNetCore.svg)](https://www.nuget.org/packages/Sentry.AspNetCore)   |
+|     **Sentry.AspNet**     | [![Downloads](https://img.shields.io/nuget/dt/Sentry.AspNet.svg)](https://www.nuget.org/packages/Sentry.AspNet) | [![NuGet](https://img.shields.io/nuget/v/Sentry.AspNet.svg)](https://www.nuget.org/packages/Sentry.AspNet)   |   [![NuGet](https://img.shields.io/nuget/vpre/Sentry.AspNet.svg)](https://www.nuget.org/packages/Sentry.AspNet)   |
 | **Sentry.Serilog**            | [![Downloads](https://img.shields.io/nuget/dt/Sentry.Serilog.svg)](https://www.nuget.org/packages/Serilog) | [![NuGet](https://img.shields.io/nuget/v/Sentry.Serilog.svg)](https://www.nuget.org/packages/Sentry.Serilog)   | [![NuGet](https://img.shields.io/nuget/vpre/Sentry.Serilog.svg)](https://www.nuget.org/packages/Sentry.Serilog)   |
 | **Sentry.Log4Net**            | [![Downloads](https://img.shields.io/nuget/dt/Sentry.Log4Net.svg)](https://www.nuget.org/packages/Sentry.Log4Net) | [![NuGet](https://img.shields.io/nuget/v/Sentry.Log4Net.svg)](https://www.nuget.org/packages/Sentry.Log4Net)   | [![NuGet](https://img.shields.io/nuget/vpre/Sentry.Log4Net.svg)](https://www.nuget.org/packages/Sentry.Log4Net)   |
 | **Sentry.NLog**               | [![Downloads](https://img.shields.io/nuget/dt/Sentry.NLog.svg)](https://www.nuget.org/packages/Sentry.NLog) | [![NuGet](https://img.shields.io/nuget/v/Sentry.NLog.svg)](https://www.nuget.org/packages/Sentry.NLog)   | [![NuGet](https://img.shields.io/nuget/vpre/Sentry.NLog.svg)](https://www.nuget.org/packages/Sentry.NLog)   |
@@ -33,7 +36,7 @@ Looking for samples using the NuGet packages? Check out [sentry-dotnet-samples](
 
 ## Usage
 
-**Consider taking a look at the _[samples](https://github.com/getsentry/sentry-dotnet/tree/master/samples)_ directory for different types of apps and example usages of the SDK.**
+**Consider taking a look at the _[samples](https://github.com/getsentry/sentry-dotnet/tree/main/samples)_ directory for different types of apps and example usages of the SDK.**
 
 This SDK provides integrations which can hook into your app and automatically capture errors and context.
 
@@ -42,7 +45,7 @@ This SDK provides integrations which can hook into your app and automatically ca
 You can still use the SDK directly to send events to Sentry.
 The integrations are just wrappers around the main SDK `Sentry`.
 
-There's a [basic sample](https://github.com/getsentry/sentry-dotnet/blob/master/samples/Sentry.Samples.Console.Basic/Program.cs) and a one demonstrating [more customization](https://github.com/getsentry/sentry-dotnet/blob/master/samples/Sentry.Samples.Console.Customized/Program.cs).
+There's a [basic sample](https://github.com/getsentry/sentry-dotnet/blob/main/samples/Sentry.Samples.Console.Basic/Program.cs) and a one demonstrating [more customization](https://github.com/getsentry/sentry-dotnet/blob/main/samples/Sentry.Samples.Console.Customized/Program.cs).
 
 Install the main SDK:
 ```shell
@@ -68,7 +71,7 @@ void Main()
 {
     using (SentrySdk.Init(o =>
     {
-        o.Dsn = new Dsn("dsn");
+        o.Dsn = "dsn";
         o.Proxy = new WebProxy("https://localhost:3128");
     }))
     {
@@ -117,7 +120,7 @@ Log messages of level `Information` will be kept as _breadcrumbs_ and if an even
 
 These levels can be configured so that the level you define tracks breadcrumbs or sends events or completely disable it.
 
-**That means that log mesages logged by you or the framework, related to the failed transaction, will be added to the event!**
+**That means that log messages logged by you or the framework, related to the failed transaction, will be added to the event!**
 
 ## DSN
 
@@ -130,6 +133,7 @@ The SDK is configurable, many of the settings are demonstrated through the sampl
 
 * HTTP Proxy
 * Event sampling
+* Filter exception by type
 * Enable request body extraction
 * Send PII data (Personal Identifiable Information, requires opt-in)
 * Read [diagnostics activity data]("https://github.com/dotnet/corefx/blob/master/src/System.Diagnostics.DiagnosticSource/src/ActivityUserGuide.md)
@@ -158,7 +162,7 @@ If you want only the logging integration:
 ```shell
 dotnet add package Sentry.Extensions.Logging
 ```
-See the [logging integration only sample](https://github.com/getsentry/sentry-dotnet/blob/master/samples/Sentry.Samples.ME.Logging/Program.cs)
+See the [logging integration only sample](https://github.com/getsentry/sentry-dotnet/blob/main/samples/Sentry.Samples.ME.Logging/Program.cs)
 
 
 ### Internals/Testability
@@ -178,7 +182,7 @@ That's the job of the `Hub`. It holds the scope management as well as a client.
 If all you are doing is sending events, without modification/access to the current scope, then you depend on `ISentryClient`. If on the other hand you would like to have access to the current scope by configuring it or binding a different client to it, etc. You'd depend on `IHub`.
 
 
-An example using `IHub` for testability is [SentryLogger](https://github.com/getsentry/sentry-dotnet/blob/master/src/Sentry.Extensions.Logging/SentryLogger.cs) and its unit tests [SentryLoggerTests](https://github.com/getsentry/sentry-dotnet/blob/master/test/Sentry.Extensions.Logging.Tests/SentryLoggerTests.cs).  
+An example using `IHub` for testability is [SentryLogger](https://github.com/getsentry/sentry-dotnet/blob/main/src/Sentry.Extensions.Logging/SentryLogger.cs) and its unit tests [SentryLoggerTests](https://github.com/getsentry/sentry-dotnet/blob/main/test/Sentry.Extensions.Logging.Tests/SentryLoggerTests.cs).  
 `SentryLogger` depends on `IHub` because it does modify the scope (through `AddBreadcrumb`). In case it only sent events, it should instead depend on `ISentryClient`
 
 ## Compatibility
@@ -202,14 +206,16 @@ Of those, we've tested (we run our unit/integration tests) against:
 
 ### Sentry Protocol
 
-Looking for the types used by this SDK to send data to Sentry like *SentryEvent* and *SentryException*?
-They are released as a separate [NuGet Package called `Sentry.Protocol`](https://www.nuget.org/packages/Sentry.Protocol/) and [sources are on this GitHub repository](https://github.com/getsentry/sentry-dotnet-protocol).
+For more details, please: **refer to the [documentation](https://getsentry.github.io/sentry-dotnet/index.html)**
 
 ### Legacy frameworks
 
 Sentry's [Raven SDK](https://github.com/getsentry/raven-csharp/), battle tested with over 1.000.000 downloads on NuGet has support to .NET Framework 3.5+.
 
 ## Resources
-* [![Stack Overflow](https://img.shields.io/badge/stack%20overflow-sentry-green.svg)](http://stackoverflow.com/questions/tagged/sentry)
+
+* [![Documentation](https://img.shields.io/badge/documentation-sentry.io-green.svg)](https://docs.sentry.io/platforms/dotnet/)
 * [![Forum](https://img.shields.io/badge/forum-sentry-green.svg)](https://forum.sentry.io/c/sdks)
-* Follow [@getsentry](https://twitter.com/getsentry) on Twitter for updates
+* [![Discord](https://img.shields.io/discord/621778831602221064)](https://discord.gg/Ww9hbqr)
+* [![Stack Overflow](https://img.shields.io/badge/stack%20overflow-sentry-green.svg)](http://stackoverflow.com/questions/tagged/sentry)
+* [![Twitter Follow](https://img.shields.io/twitter/follow/getsentry?label=getsentry&style=social)](https://twitter.com/intent/follow?screen_name=getsentry)

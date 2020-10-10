@@ -1,8 +1,6 @@
-#if SYSTEM_WEB
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
-using System.Security.Principal;
 using System.Web;
 using Sentry.Extensibility;
 using Sentry.Protocol;
@@ -20,17 +18,40 @@ namespace Sentry.Internal.Web
             PayloadExtractor = payloadExtractor ?? throw new ArgumentNullException(nameof(payloadExtractor));
         }
 
-        public SentryEvent Process(SentryEvent @event)
+        public SentryEvent? Process(SentryEvent? @event)
         {
             var context = HttpContext.Current;
-            if (context == null || @event == null)
+            if (context is null || @event is null)
             {
                 return @event;
             }
 
+            try
+            {
+                // During Application initialization we might have an event to send but no HTTP Request.
+                // Request getter throws and doesn't seem there's a way to query for it.
+                _ = context.Request;
+            }
+            catch (HttpException)
+            {
+                _options.DiagnosticLogger?.LogDebug("HttpException not available to retrieve context.");
+                return @event;
+            }
+
             @event.Request.Method = context.Request.HttpMethod;
-            @event.Request.Url = context.Request.Path;
-            @event.Request.QueryString = context.Request.QueryString.ToString();
+            @event.Request.Url = context.Request.Url.AbsoluteUri;
+
+            try
+            {
+                // ReSharper disable once ConstantConditionalAccessQualifier
+                @event.Request.QueryString = context.Request.QueryString?.ToString();
+            }
+            catch (NullReferenceException)
+            {
+                // Ignored since it can throw on WCF on the first event.
+                // See #390
+                _options.DiagnosticLogger?.LogDebug("Ignored NRE thrown on System.Web.HttpContext.Request.QueryString");
+            }
 
             foreach (var key in context.Request.Headers.AllKeys)
             {
@@ -54,7 +75,7 @@ namespace Sentry.Internal.Web
                 }
 
                 @event.User.IpAddress = context.Request.UserHostAddress;
-                if (context.User.Identity is IIdentity identity)
+                if (context.User.Identity is { } identity)
                 {
                     @event.User.Username = identity.Name;
                     var other = new Dictionary<string, string>
@@ -65,7 +86,7 @@ namespace Sentry.Internal.Web
                 }
                 if (context.User is ClaimsPrincipal claimsPrincipal)
                 {
-                    if (claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier) is Claim claim)
+                    if (claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier) is { } claim)
                     {
                         @event.User.Id = claim.Value;
                     }
@@ -85,7 +106,7 @@ namespace Sentry.Internal.Web
             {
                 @event.Contexts["server-os"] = os;
             }
-            
+
             var body = PayloadExtractor.ExtractPayload(new SystemWebHttpRequest(context.Request));
             if (body != null)
             {
@@ -95,4 +116,3 @@ namespace Sentry.Internal.Web
         }
     }
 }
-#endif
