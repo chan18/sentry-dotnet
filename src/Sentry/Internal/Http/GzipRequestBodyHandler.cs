@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -20,9 +19,9 @@ namespace Sentry.Internal.Http
         private readonly CompressionLevel _compressionLevel;
 
         /// <summary>
-        /// Creates a new instance of <see cref="T:Sentry.Internal.Http.GzipRequestBodyHandler" />
+        /// Creates a new instance of <see cref="T:Sentry.Internal.Http.GzipRequestBodyHandler" />.
         /// </summary>
-        /// <param name="innerHandler">The actual handler which handles the request</param>
+        /// <param name="innerHandler">The actual handler which handles the request.</param>
         /// <param name="compressionLevel">The compression level to use.</param>
         /// <exception cref="T:System.InvalidOperationException">Constructing this type with <see cref="T:System.IO.Compression.CompressionLevel" />
         /// of value <see cref="F:System.IO.Compression.CompressionLevel.NoCompression" /> is an invalid operation.</exception>
@@ -39,18 +38,20 @@ namespace Sentry.Internal.Http
         }
 
         /// <summary>
-        /// Sends the request while compressing it's payload
+        /// Sends the request while compressing its payload.
         /// </summary>
-        /// <param name="request">The HTTP request to compress</param>
-        /// <param name="cancellationToken">The cancellation token</param>
+        /// <param name="request">The HTTP request to compress.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns></returns>
         /// <inheritdoc />
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            request.Content = new GzipContent(request.Content, _compressionLevel);
-
+            if (request.Content is not null)
+            {
+                request.Content = new GzipContent(request.Content, _compressionLevel);
+            }
             return base.SendAsync(request, cancellationToken);
         }
 
@@ -62,13 +63,12 @@ namespace Sentry.Internal.Http
 
             public GzipContent(HttpContent content, CompressionLevel compressionLevel)
             {
-                Debug.Assert(content != null);
                 _content = content;
                 _compressionLevel = compressionLevel;
 
                 foreach (var header in content.Headers)
                 {
-                    Headers.TryAddWithoutValidation(header.Key, header.Value);
+                    _ = Headers.TryAddWithoutValidation(header.Key, header.Value);
                 }
 
                 Headers.ContentEncoding.Add(Gzip);
@@ -80,7 +80,7 @@ namespace Sentry.Internal.Http
                 return false;
             }
 
-            protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
+            protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
             {
                 var gzipStream = new GZipStream(stream, _compressionLevel, leaveOpen: true);
                 try

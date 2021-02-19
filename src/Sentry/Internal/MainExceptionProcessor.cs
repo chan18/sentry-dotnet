@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Sentry.Extensibility;
@@ -15,33 +14,26 @@ namespace Sentry.Internal
 
         public MainExceptionProcessor(SentryOptions options, Func<ISentryStackTraceFactory> sentryStackTraceFactoryAccessor)
         {
-            Debug.Assert(options != null);
-            Debug.Assert(sentryStackTraceFactoryAccessor != null);
             _options = options;
             SentryStackTraceFactoryAccessor = sentryStackTraceFactoryAccessor;
         }
 
         public void Process(Exception exception, SentryEvent sentryEvent)
         {
-            Debug.Assert(sentryEvent != null);
-
             _options.DiagnosticLogger?.LogDebug("Running processor on exception: {0}", exception.Message);
 
-            if (exception != null)
-            {
-                var sentryExceptions = CreateSentryException(exception)
-                    // Otherwise realization happens on the worker thread before sending event.
-                    .ToList();
+            var sentryExceptions = CreateSentryException(exception)
+                // Otherwise realization happens on the worker thread before sending event.
+                .ToList();
 
-                MoveExceptionExtrasToEvent(sentryEvent, sentryExceptions);
+            MoveExceptionExtrasToEvent(sentryEvent, sentryExceptions);
 
-                sentryEvent.SentryExceptions = sentryExceptions;
-            }
+            sentryEvent.SentryExceptions = sentryExceptions;
         }
 
         // SentryException.Extra is not supported by Sentry yet.
         // Move the extras to the Event Extra while marking
-        // by index the Exception which owns it
+        // by index the Exception which owns it.
         private static void MoveExceptionExtrasToEvent(
             SentryEvent sentryEvent,
             IReadOnlyList<SentryException> sentryExceptions)
@@ -50,7 +42,7 @@ namespace Sentry.Internal
             {
                 var sentryException = sentryExceptions[i];
 
-                if (!(sentryException.Data?.Count > 0))
+                if (sentryException.Data.Count <= 0)
                 {
                     continue;
                 }
@@ -64,8 +56,6 @@ namespace Sentry.Internal
 
         internal IEnumerable<SentryException> CreateSentryException(Exception exception)
         {
-            Debug.Assert(exception != null);
-
             if (exception is AggregateException ae)
             {
                 foreach (var inner in ae.InnerExceptions.SelectMany(CreateSentryException))
@@ -108,16 +98,23 @@ namespace Sentry.Internal
 
         internal static Mechanism GetMechanism(Exception exception)
         {
-            Debug.Assert(exception != null);
-
-            Mechanism mechanism = null;
+            var mechanism = new Mechanism();
 
             if (exception.HelpLink != null)
             {
-                mechanism = new Mechanism
-                {
-                    HelpLink = exception.HelpLink
-                };
+                mechanism.HelpLink = exception.HelpLink;
+            }
+
+            if (exception.Data[Mechanism.HandledKey] is bool handled)
+            {
+                mechanism.Handled = handled;
+                exception.Data.Remove(Mechanism.HandledKey);
+            }
+
+            if (exception.Data[Mechanism.MechanismKey] is string mechanismName)
+            {
+                mechanism.Type = mechanismName;
+                exception.Data.Remove(Mechanism.MechanismKey);
             }
 
             return mechanism;

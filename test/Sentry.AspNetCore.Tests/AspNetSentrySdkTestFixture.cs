@@ -1,5 +1,6 @@
 using System;
 using Microsoft.AspNetCore.Hosting;
+using Sentry.AspNetCore.Tests.Utils;
 using Sentry.Testing;
 
 namespace Sentry.AspNetCore.Tests
@@ -15,11 +16,10 @@ namespace Sentry.AspNetCore.Tests
         {
             var sentry = FakeSentryServer.CreateServer();
             var sentryHttpClient = sentry.CreateClient();
-            builder.UseSentry(options =>
+            _ = builder.UseSentry(options =>
             {
                 options.Dsn = DsnSamples.ValidDsnWithSecret;
-                options.SentryHttpClientFactory = new DelegateHttpClientFactory((d, o)
-                        => sentryHttpClient);
+                options.SentryHttpClientFactory = new DelegateHttpClientFactory(_ => sentryHttpClient);
 
                 Configure?.Invoke(options);
             });

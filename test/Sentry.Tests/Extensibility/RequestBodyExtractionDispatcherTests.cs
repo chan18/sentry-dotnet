@@ -11,7 +11,7 @@ namespace Sentry.Tests.Extensibility
     {
         private class Fixture
         {
-            public SentryOptions SentryOptions { get; set; } = new SentryOptions();
+            public SentryOptions SentryOptions { get; set; } = new();
             public RequestSize RequestSize { get; set; } = RequestSize.Small;
             public IHttpRequest HttpRequest { get; set; } = Substitute.For<IHttpRequest>();
             public IRequestPayloadExtractor Extractor { get; set; } = Substitute.For<IRequestPayloadExtractor>();
@@ -19,15 +19,15 @@ namespace Sentry.Tests.Extensibility
 
             public Fixture()
             {
-                HttpRequest.ContentLength.Returns(10);
-                Extractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns("Result");
+                _ = HttpRequest.ContentLength.Returns(10);
+                _ = Extractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns("Result");
                 Extractors = new[] { Extractor };
             }
 
-            public RequestBodyExtractionDispatcher GetSut() => new RequestBodyExtractionDispatcher(Extractors, SentryOptions, () => RequestSize);
+            public RequestBodyExtractionDispatcher GetSut() => new(Extractors, SentryOptions, () => RequestSize);
         }
 
-        private readonly Fixture _fixture = new Fixture();
+        private readonly Fixture _fixture = new();
 
         [Fact]
         public void ExtractPayload_DefaultFixture_ReadsMockPayload()
@@ -41,7 +41,7 @@ namespace Sentry.Tests.Extensibility
         [Fact]
         public void ExtractPayload_ExtractorEmptyString_ReturnsNull()
         {
-            _fixture.Extractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns(string.Empty);
+            _ = _fixture.Extractor.ExtractPayload(Arg.Any<IHttpRequest>()).Returns(string.Empty);
             var sut = _fixture.GetSut();
 
             Assert.Null(sut.ExtractPayload(_fixture.HttpRequest));
@@ -50,7 +50,7 @@ namespace Sentry.Tests.Extensibility
         [Fact]
         public void ExtractPayload_ExtractorNull_ReturnsNull()
         {
-            _fixture.Extractor.ExtractPayload(Arg.Any<IHttpRequest>()).ReturnsNull();
+            _ = _fixture.Extractor.ExtractPayload(Arg.Any<IHttpRequest>()).ReturnsNull();
             var sut = _fixture.GetSut();
 
             Assert.Null(sut.ExtractPayload(_fixture.HttpRequest));
@@ -66,7 +66,7 @@ namespace Sentry.Tests.Extensibility
         public void ExtractPayload_RequestSizeSmall_ContentLength(RequestSize requestSize, int contentLength, bool readBody)
         {
             _fixture.RequestSize = requestSize;
-            _fixture.HttpRequest.ContentLength.Returns(contentLength);
+            _ = _fixture.HttpRequest.ContentLength.Returns(contentLength);
             var sut = _fixture.GetSut();
 
             Assert.Equal(readBody, sut.ExtractPayload(_fixture.HttpRequest) != null);
@@ -83,14 +83,14 @@ namespace Sentry.Tests.Extensibility
         public void Ctor_NullExtractors_ThrowsArgumentNullException()
         {
             _fixture.Extractors = null;
-            Assert.Throws<ArgumentNullException>(() => _fixture.GetSut());
+            _ = Assert.Throws<ArgumentNullException>(() => _fixture.GetSut());
         }
 
         [Fact]
         public void Ctor_NullOptions_ThrowsArgumentNullException()
         {
             _fixture.SentryOptions = null;
-            Assert.Throws<ArgumentNullException>(() => _fixture.GetSut());
+            _ = Assert.Throws<ArgumentNullException>(() => _fixture.GetSut());
         }
     }
 }

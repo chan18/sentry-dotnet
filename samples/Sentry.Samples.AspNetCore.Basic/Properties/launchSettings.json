@@ -3,7 +3,7 @@
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
     "iisExpress": {
-      "applicationUrl": "http://localhost:59739/",
+      "applicationUrl": "http://localhost:59739",
       "sslPort": 0
     }
   },
@@ -13,11 +13,9 @@
       "launchBrowser": true,
       "launchUrl": "throw",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        // The release can be defined via environmnet variable:
+        "SENTRY_DSN": "https://80aed643f81249d4bed3e30687b310ab@o447951.ingest.sentry.io/5428537",
         "SENTRY_RELEASE": "e386dfd",
-        // If running with IIS Express: Set your DSN here:
-        "SENTRY_DSN": "https://5fd7a6cda8444965bade9ccfd3df9882@sentry.io/1188141"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
     "Sentry.Samples.AspNetCore.Basic": {
@@ -25,13 +23,11 @@
       "launchBrowser": true,
       "launchUrl": "throw",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        // The release can be defined via environmnet variable:
+        "SENTRY_DSN": "https://80aed643f81249d4bed3e30687b310ab@o447951.ingest.sentry.io/5428537",
         "SENTRY_RELEASE": "e386dfd",
-        // If running with kestrel (dotnet run): Set your DSN here:
-        "SENTRY_DSN": "https://5fd7a6cda8444965bade9ccfd3df9882@sentry.io/1188141"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "http://localhost:59740/"
+      "applicationUrl": "http://localhost:59740"
     }
   }
 }

@@ -10,7 +10,9 @@ using Sentry.Internal;
 // Ensures 'AddSentry' can be found without: 'using Sentry;'
 namespace Microsoft.Extensions.Logging
 {
-    ///
+    /// <summary>
+    /// SentryLoggerFactory extensions.
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static class SentryLoggerFactoryExtensions
     {
@@ -26,7 +28,7 @@ namespace Microsoft.Extensions.Logging
         /// <returns></returns>
         public static ILoggerFactory AddSentry(
             this ILoggerFactory factory,
-            Action<SentryLoggingOptions> optionsConfiguration = null)
+            Action<SentryLoggingOptions>? optionsConfiguration = null)
         {
             var options = new SentryLoggingOptions();
 
@@ -35,14 +37,23 @@ namespace Microsoft.Extensions.Logging
             if (options.DiagnosticLogger == null)
             {
                 var logger = factory.CreateLogger<ISentryClient>();
-                options.DiagnosticLogger = new MelDiagnosticLogger(logger, options.DiagnosticsLevel);
+                options.DiagnosticLogger = new MelDiagnosticLogger(logger, options.DiagnosticLevel);
             }
 
             IHub hub;
             if (options.InitializeSdk)
             {
-                hub = new OptionalHub(options);
-                SentrySdk.UseHub(hub);
+                if (SentrySdk.IsEnabled && options.Dsn is null)
+                {
+                    options.DiagnosticLogger?.LogWarning("Not calling Init from {0} because SDK is already enabled and no DSN was provided to the integration", nameof(SentryLoggerFactoryExtensions));
+                    hub = HubAdapter.Instance;
+                }
+                else
+                {
+                    options.DiagnosticLogger?.LogDebug("Initializing from {0} and swapping current Hub.", nameof(SentryLoggerFactoryExtensions));
+                    hub = SentrySdk.InitHub(options);
+                    SentrySdk.UseHub(hub);
+                }
             }
             else
             {

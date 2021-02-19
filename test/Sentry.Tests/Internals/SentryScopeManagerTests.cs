@@ -13,18 +13,18 @@ namespace Sentry.Tests.Internals
     {
         private class Fixture
         {
-            public SentryOptions SentryOptions { get; set; } = new SentryOptions();
+            public SentryOptions SentryOptions { get; set; } = new();
             public ISentryClient Client { get; set; } = Substitute.For<ISentryClient>();
-            public SentryScopeManager GetSut() => new SentryScopeManager(SentryOptions, Client);
+            public SentryScopeManager GetSut() => new(SentryOptions, Client);
         }
 
-        private readonly Fixture _fixture = new Fixture();
+        private readonly Fixture _fixture = new();
 
         [Fact]
-        public void GetCurrent_Scope_ReturnsInstance() => Assert.NotNull(_fixture.GetSut().GetCurrent().Item1);
+        public void GetCurrent_Scope_ReturnsInstance() => Assert.NotNull(_fixture.GetSut().GetCurrent().Key);
 
         [Fact]
-        public void GetCurrent_Client_ReturnsInstance() => Assert.NotNull(_fixture.GetSut().GetCurrent().Item2);
+        public void GetCurrent_Client_ReturnsInstance() => Assert.NotNull(_fixture.GetSut().GetCurrent().Value);
 
         [Fact]
         public void GetCurrent_Equality_SameOnInstance()
@@ -53,7 +53,7 @@ namespace Sentry.Tests.Internals
             var sut = _fixture.GetSut();
 
             var root = sut.GetCurrent();
-            sut.PushScope();
+            _ = sut.PushScope();
 
             Assert.NotEqual(root, sut.GetCurrent());
         }
@@ -64,19 +64,37 @@ namespace Sentry.Tests.Internals
             var sut = _fixture.GetSut();
 
             sut.BindClient(null);
-            var (_, client) = sut.GetCurrent();
+            var currentScope = sut.GetCurrent();
 
-            Assert.Same(DisabledHub.Instance, client);
+            Assert.Same(DisabledHub.Instance, currentScope.Value);
         }
 
         [Fact]
         public void BindClient_Scope_StaysTheSame()
         {
             var sut = _fixture.GetSut();
-            var (scope, _) = sut.GetCurrent();
+            var currentScope = sut.GetCurrent();
 
             sut.BindClient(Substitute.For<ISentryClient>());
-            Assert.Same(scope, sut.GetCurrent().Item1);
+            Assert.Same(currentScope.Key, sut.GetCurrent().Key);
+        }
+
+        [Fact]
+        public void BindClient_ScopeState_StaysTheSame()
+        {
+            var sut = _fixture.GetSut();
+            var currentScope = sut.GetCurrent();
+
+            var scope1 = sut.PushScope(1);
+            var scope2 = sut.PushScope(2);
+            Assert.Equal(2, sut.GetCurrent().Key.Extra["state"]);
+
+            sut.BindClient(Substitute.For<ISentryClient>());
+
+            Assert.Equal(2, sut.GetCurrent().Key.Extra["state"]);
+
+            scope2.Dispose();
+            Assert.Equal(1, sut.GetCurrent().Key.Extra["state"]);
         }
 
         [Fact]
@@ -90,17 +108,22 @@ namespace Sentry.Tests.Internals
         public void ConfigureScopeAsync_NullArgument_ReturnsCompletedTask()
         {
             var sut = _fixture.GetSut();
-            Assert.Same(Task.CompletedTask, sut.ConfigureScopeAsync(null));
+            Assert.Equal(Task.CompletedTask, sut.ConfigureScopeAsync(null));
         }
 
         [Fact]
-        public void ConfigureScopeAsync_Callback_InvokesCallback()
+        public async Task ConfigureScopeAsync_Callback_InvokesCallback()
         {
             var sut = _fixture.GetSut();
-            var expectedTask = Task.FromResult(1);
+            var isInvoked = false;
 
-            var actualTask = sut.ConfigureScopeAsync(scope => expectedTask);
-            Assert.Same(expectedTask, actualTask);
+            await sut.ConfigureScopeAsync(scope =>
+            {
+                isInvoked = true;
+                return default;
+            });
+
+            Assert.True(isInvoked);
         }
 
         [Fact]
@@ -108,7 +131,7 @@ namespace Sentry.Tests.Internals
         {
             var sut = _fixture.GetSut();
             var first = sut.GetCurrent();
-            sut.PushScope();
+            _ = sut.PushScope();
             var second = sut.GetCurrent();
 
             Assert.NotEqual(first, second);
@@ -118,22 +141,22 @@ namespace Sentry.Tests.Internals
         public void PushScope_Parameterless_UsesSameClient()
         {
             var sut = _fixture.GetSut();
-            var (_, first) = sut.GetCurrent();
-            sut.PushScope();
-            var (_, second) = sut.GetCurrent();
+            var firstScope = sut.GetCurrent();
+            _ = sut.PushScope();
+            var secondScope = sut.GetCurrent();
 
-            Assert.Same(first, second);
+            Assert.Same(firstScope.Value, secondScope.Value);
         }
 
         [Fact]
         public void PushScope_StateInstance_UsesSameClient()
         {
             var sut = _fixture.GetSut();
-            var (_, first) = sut.GetCurrent();
-            sut.PushScope(new object());
-            var (_, second) = sut.GetCurrent();
+            var firstScope = sut.GetCurrent();
+            _ = sut.PushScope(new object());
+            var secondScope = sut.GetCurrent();
 
-            Assert.Same(first, second);
+            Assert.Same(firstScope.Value, secondScope.Value);
         }
 
         [Fact]
@@ -141,7 +164,7 @@ namespace Sentry.Tests.Internals
         {
             var sut = _fixture.GetSut();
             var first = sut.GetCurrent();
-            sut.PushScope(new object());
+            _ = sut.PushScope(new object());
             var second = sut.GetCurrent();
 
             Assert.NotEqual(first, second);
@@ -197,10 +220,10 @@ namespace Sentry.Tests.Internals
             // Creates event second, disposes first
             var t1 = Task.Run(() =>
             {
-                t1Evt.Set(); // unblock task start
+                _ = t1Evt.Set(); // unblock task start
 
                 // Wait t2 create scope
-                t2Evt.WaitOne();
+                _ = t2Evt.WaitOne();
                 try
                 {
                     // t2 created scope, make sure this parent is still root
@@ -214,14 +237,14 @@ namespace Sentry.Tests.Internals
                 }
                 finally
                 {
-                    t1Evt.Set();
+                    _ = t1Evt.Set();
                 }
 
                 Assert.Equal(root, sut.GetCurrent());
             });
 
-            t1Evt.WaitOne(); // Wait t1 start
-            t1Evt.Reset();
+            _ = t1Evt.WaitOne(); // Wait t1 start
+            _ = t1Evt.Reset();
 
             // Creates a scope first, disposes after t2
             var t2 = Task.Run(() =>
@@ -235,11 +258,11 @@ namespace Sentry.Tests.Internals
                 }
                 finally
                 {
-                    t2Evt.Set(); // release t1
+                    _ = t2Evt.Set(); // release t1
                 }
 
                 // Wait for t1 to create and dispose its scope
-                t1Evt.WaitOne();
+                _ = t1Evt.WaitOne();
                 scope.Dispose();
 
                 Assert.Equal(root, sut.GetCurrent());
@@ -255,8 +278,8 @@ namespace Sentry.Tests.Internals
         {
             var sut = _fixture.GetSut();
             var root = sut.GetCurrent();
-            void AddRandomTag() => sut.GetCurrent().Item1.SetTag(Guid.NewGuid().ToString(), "1");
-            void AssertTagCount(int count) => Assert.Equal(count, sut.GetCurrent().Item1.Tags.Count);
+            void AddRandomTag() => sut.GetCurrent().Key.SetTag(Guid.NewGuid().ToString(), "1");
+            void AssertTagCount(int count) => Assert.Equal(count, sut.GetCurrent().Key.Tags.Count);
 
             AddRandomTag();
             AssertTagCount(1);

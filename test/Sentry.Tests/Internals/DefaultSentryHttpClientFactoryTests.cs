@@ -1,8 +1,7 @@
-using System;
 using System.IO.Compression;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
+using NSubstitute;
 using Sentry.Internal.Http;
 using Xunit;
 
@@ -12,34 +11,23 @@ namespace Sentry.Tests.Internals
     {
         private class Fixture
         {
-            public SentryOptions HttpOptions { get; set; } = new SentryOptions
+            public SentryOptions HttpOptions { get; set; } = new()
             {
-                Dsn = DsnSamples.Valid
+                Dsn = DsnSamples.ValidDsnWithSecret
             };
 
-            public Action<HttpClientHandler, Dsn> ConfigureHandler { get; set; }
-            public Action<HttpClient, Dsn> ConfigureClient { get; set; }
-
             public DefaultSentryHttpClientFactory GetSut()
-                => new DefaultSentryHttpClientFactory(ConfigureHandler, ConfigureClient);
+                => new();
         }
 
-        private readonly Fixture _fixture = new Fixture();
-
-        [Fact]
-        public void Create_NullDsn_ThrowsArgumentNullException()
-        {
-            var sut = _fixture.GetSut();
-            var ex = Assert.Throws<ArgumentNullException>(() => sut.Create(null, _fixture.HttpOptions));
-            Assert.Equal("dsn", ex.ParamName);
-        }
+        private readonly Fixture _fixture = new();
 
         [Fact]
         public void Create_Returns_HttpClient()
         {
             var sut = _fixture.GetSut();
 
-            Assert.NotNull(sut.Create(DsnSamples.Valid, _fixture.HttpOptions));
+            Assert.NotNull(sut.Create(_fixture.HttpOptions));
         }
 
         [Fact]
@@ -49,7 +37,7 @@ namespace Sentry.Tests.Internals
 
             var sut = _fixture.GetSut();
 
-            var client = sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
+            var client = sut.Create(_fixture.HttpOptions);
 
             foreach (var handler in client.GetMessageHandlers())
             {
@@ -60,13 +48,13 @@ namespace Sentry.Tests.Internals
         [Theory]
         [InlineData(CompressionLevel.Fastest)]
         [InlineData(CompressionLevel.Optimal)]
-        public void Create_CompressionLeveEnabled_ByDefault_IncludesGzipRequestBodyHandler(CompressionLevel level)
+        public void Create_CompressionLevelEnabled_ByDefault_IncludesGzipRequestBodyHandler(CompressionLevel level)
         {
             _fixture.HttpOptions.RequestBodyCompressionLevel = level;
 
             var sut = _fixture.GetSut();
 
-            var client = sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
+            var client = sut.Create(_fixture.HttpOptions);
 
             Assert.Contains(client.GetMessageHandlers(), h => h.GetType() == typeof(GzipBufferedRequestBodyHandler));
         }
@@ -74,13 +62,13 @@ namespace Sentry.Tests.Internals
         [Theory]
         [InlineData(CompressionLevel.Fastest)]
         [InlineData(CompressionLevel.Optimal)]
-        public void Create_CompressionLeveEnabled_NonBuffered_IncludesGzipRequestBodyHandler(CompressionLevel level)
+        public void Create_CompressionLevelEnabled_NonBuffered_IncludesGzipRequestBodyHandler(CompressionLevel level)
         {
             _fixture.HttpOptions.RequestBodyCompressionLevel = level;
             _fixture.HttpOptions.RequestBodyCompressionBuffered = false;
             var sut = _fixture.GetSut();
 
-            var client = sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
+            var client = sut.Create(_fixture.HttpOptions);
 
             Assert.Contains(client.GetMessageHandlers(), h => h.GetType() == typeof(GzipRequestBodyHandler));
         }
@@ -90,76 +78,59 @@ namespace Sentry.Tests.Internals
         {
             var sut = _fixture.GetSut();
 
-            var client = sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
+            var client = sut.Create(_fixture.HttpOptions);
 
             Assert.Equal(typeof(RetryAfterHandler), client.GetMessageHandlers().First().GetType());
-        }
-
-        [Fact]
-        public void Create_DecompressionMethodNone_SetToClientHandler()
-        {
-            _fixture.HttpOptions.DecompressionMethods = DecompressionMethods.None;
-
-            var configureHandlerInvoked = false;
-            _fixture.ConfigureHandler = (handler, dsn) =>
-            {
-                Assert.Equal(DecompressionMethods.None, handler.AutomaticDecompression);
-                configureHandlerInvoked = true;
-            };
-            var sut = _fixture.GetSut();
-
-            sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
-
-            Assert.True(configureHandlerInvoked);
-        }
-
-        [Fact]
-        public void Create_DecompressionMethodDefault_AllBitsSet()
-        {
-            var configureHandlerInvoked = false;
-            _fixture.ConfigureHandler = (handler, dsn) =>
-            {
-                Assert.Equal(~DecompressionMethods.None, handler.AutomaticDecompression);
-                configureHandlerInvoked = true;
-            };
-            var sut = _fixture.GetSut();
-
-            sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
-
-            Assert.True(configureHandlerInvoked);
         }
 
         [Fact]
         public void Create_DefaultHeaders_AcceptJson()
         {
             var configureHandlerInvoked = false;
-            _fixture.ConfigureClient = (client, dsn) =>
+            _fixture.HttpOptions.ConfigureClient = client =>
             {
                 Assert.Equal("application/json", client.DefaultRequestHeaders.Accept.ToString());
                 configureHandlerInvoked = true;
             };
             var sut = _fixture.GetSut();
 
-            sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
+            _ = sut.Create(_fixture.HttpOptions);
 
             Assert.True(configureHandlerInvoked);
         }
 
         [Fact]
-        public void Create_HttpProxyOnOptions_HandlerUsesProxy()
+        public void Create_ProvidedCreateHttpClientHandler_ReturnedHandlerUsed()
         {
-            _fixture.HttpOptions.HttpProxy = new WebProxy("https://proxy.sentry.io:31337");
-            var configureHandlerInvoked = false;
-            _fixture.ConfigureHandler = (handler, dsn) =>
-            {
-                Assert.Same(_fixture.HttpOptions.HttpProxy, handler.Proxy);
-                configureHandlerInvoked = true;
-            };
+            var handler = Substitute.For<HttpClientHandler>();
+            _fixture.HttpOptions.CreateHttpClientHandler = () => handler;
             var sut = _fixture.GetSut();
 
-            sut.Create(DsnSamples.Valid, _fixture.HttpOptions);
+            var client = sut.Create(_fixture.HttpOptions);
 
-            Assert.True(configureHandlerInvoked);
+            Assert.Contains(client.GetMessageHandlers(), h => ReferenceEquals(handler, h));
+        }
+
+        [Fact]
+        public void Create_NullCreateHttpClientHandler_HttpClientHandlerUsed()
+        {
+            _fixture.HttpOptions.CreateHttpClientHandler = null;
+            var sut = _fixture.GetSut();
+
+            var client = sut.Create(_fixture.HttpOptions);
+
+            Assert.Contains(client.GetMessageHandlers(), h => h.GetType() == typeof(HttpClientHandler));
+        }
+
+        [Fact]
+        public void Create_NullReturnedCreateHttpClientHandler_HttpClientHandlerUsed()
+        {
+            _fixture.HttpOptions.CreateHttpClientHandler = () => null;
+            var sut = _fixture.GetSut();
+
+            var client = sut.Create(_fixture.HttpOptions);
+
+            Assert.Contains(client.GetMessageHandlers(), h => h.GetType() == typeof(HttpClientHandler));
         }
     }
 }

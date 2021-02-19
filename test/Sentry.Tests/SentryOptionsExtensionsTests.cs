@@ -4,27 +4,42 @@ using NSubstitute;
 using Sentry.Extensibility;
 using Sentry.Integrations;
 using Sentry.Internal;
+#if NETFX
+using Sentry.PlatformAbstractions;
+#endif
 using Xunit;
 
 namespace Sentry.Tests
 {
     public class SentryOptionsExtensionsTests
     {
-        public SentryOptions Sut { get; set; } = new SentryOptions();
+        public SentryOptions Sut { get; set; } = new();
 
         [Fact]
         public void DisableDuplicateEventDetection_RemovesDisableDuplicateEventDetection()
         {
             Sut.DisableDuplicateEventDetection();
-            Assert.DoesNotContain(Sut.EventProcessors,
+            Assert.DoesNotContain(Sut.EventProcessors!,
                 p => p.GetType() == typeof(DuplicateEventDetectionEventProcessor));
         }
+
+#if NETFX
+        [Fact]
+        public void DisableNetFxInstallationsEventProcessor_RemovesDisableNetFxInstallationsEventProcessorEventProcessor()
+        {
+            Sut.DisableNetFxInstallationsIntegration();
+            Assert.DoesNotContain(Sut.EventProcessors,
+                p => p.GetType() == typeof(NetFxInstallationsEventProcessor));
+            Assert.DoesNotContain(Sut.Integrations,
+                p => p.GetType() == typeof(NetFxInstallationsIntegration));
+        }
+#endif
 
         [Fact]
         public void DisableAppDomainUnhandledExceptionCapture_RemovesAppDomainUnhandledExceptionIntegration()
         {
             Sut.DisableAppDomainUnhandledExceptionCapture();
-            Assert.DoesNotContain(Sut.Integrations,
+            Assert.DoesNotContain(Sut.Integrations!,
                 p => p.GetType() == typeof(AppDomainUnhandledExceptionIntegration));
         }
 
@@ -33,7 +48,7 @@ namespace Sentry.Tests
         {
             var expected = Substitute.For<ISdkIntegration>();
             Sut.AddIntegration(expected);
-            Assert.Contains(Sut.Integrations, actual => actual == expected);
+            Assert.Contains(Sut.Integrations!, actual => actual == expected);
         }
 
         [Fact]
@@ -41,7 +56,7 @@ namespace Sentry.Tests
         {
             const string expected = "test";
             Sut.AddInAppExclude(expected);
-            Assert.Contains(Sut.InAppExclude, actual => actual == expected);
+            Assert.Contains(Sut.InAppExclude!, actual => actual == expected);
         }
 
         [Fact]
@@ -49,7 +64,7 @@ namespace Sentry.Tests
         {
             const string expected = "test";
             Sut.AddInAppInclude(expected);
-            Assert.Contains(Sut.InAppInclude, actual => actual == expected);
+            Assert.Contains(Sut.InAppInclude!, actual => actual == expected);
         }
 
         [Fact]
@@ -57,7 +72,7 @@ namespace Sentry.Tests
         {
             var expected = Substitute.For<ISentryEventExceptionProcessor>();
             Sut.AddExceptionProcessor(expected);
-            Assert.Contains(Sut.ExceptionProcessors, actual => actual == expected);
+            Assert.Contains(Sut.ExceptionProcessors!, actual => actual == expected);
         }
 
         [Fact]
@@ -66,7 +81,7 @@ namespace Sentry.Tests
             var first = Substitute.For<ISentryEventExceptionProcessor>();
             var second = Substitute.For<ISentryEventExceptionProcessor>();
             Sut.AddExceptionProcessors(new[] { first, second });
-            Assert.Contains(Sut.ExceptionProcessors, actual => actual == first);
+            Assert.Contains(Sut.ExceptionProcessors!, actual => actual == first);
             Assert.Contains(Sut.ExceptionProcessors, actual => actual == second);
         }
 
@@ -84,21 +99,21 @@ namespace Sentry.Tests
         public void AddExceptionProcessor_DoesNotExcludeMainProcessor()
         {
             Sut.AddExceptionProcessor(Substitute.For<ISentryEventExceptionProcessor>());
-            Assert.Contains(Sut.ExceptionProcessors, actual => actual.GetType() == typeof(MainExceptionProcessor));
+            Assert.Contains(Sut.ExceptionProcessors!, actual => actual.GetType() == typeof(MainExceptionProcessor));
         }
 
         [Fact]
         public void AddExceptionProcessors_DoesNotExcludeMainProcessor()
         {
             Sut.AddExceptionProcessors(new[] { Substitute.For<ISentryEventExceptionProcessor>() });
-            Assert.Contains(Sut.ExceptionProcessors, actual => actual.GetType() == typeof(MainExceptionProcessor));
+            Assert.Contains(Sut.ExceptionProcessors!, actual => actual.GetType() == typeof(MainExceptionProcessor));
         }
 
         [Fact]
         public void AddExceptionProcessorProvider_DoesNotExcludeMainProcessor()
         {
             Sut.AddExceptionProcessorProvider(() => new[] { Substitute.For<ISentryEventExceptionProcessor>() });
-            Assert.Contains(Sut.ExceptionProcessors, actual => actual.GetType() == typeof(MainExceptionProcessor));
+            Assert.Contains(Sut.ExceptionProcessors!, actual => actual.GetType() == typeof(MainExceptionProcessor));
         }
 
         [Fact]
@@ -114,7 +129,7 @@ namespace Sentry.Tests
             Sut.AddExceptionProcessors(new[] { Substitute.For<ISentryEventExceptionProcessor>() });
             Sut.AddExceptionProcessor(Substitute.For<ISentryEventExceptionProcessor>());
 
-            Assert.IsType<MainExceptionProcessor>(Sut.GetAllExceptionProcessors().First());
+            _ = Assert.IsType<MainExceptionProcessor>(Sut.GetAllExceptionProcessors().First());
         }
 
         [Fact]
@@ -122,7 +137,7 @@ namespace Sentry.Tests
         {
             var expected = Substitute.For<ISentryEventProcessor>();
             Sut.AddEventProcessor(expected);
-            Assert.Contains(Sut.EventProcessors, actual => actual == expected);
+            Assert.Contains(Sut.EventProcessors!, actual => actual == expected);
         }
 
         [Fact]
@@ -131,7 +146,7 @@ namespace Sentry.Tests
             var first = Substitute.For<ISentryEventProcessor>();
             var second = Substitute.For<ISentryEventProcessor>();
             Sut.AddEventProcessors(new[] { first, second });
-            Assert.Contains(Sut.EventProcessors, actual => actual == first);
+            Assert.Contains(Sut.EventProcessors!, actual => actual == first);
             Assert.Contains(Sut.EventProcessors, actual => actual == second);
         }
 
@@ -149,21 +164,21 @@ namespace Sentry.Tests
         public void AddEventProcessor_DoesNotExcludeMainProcessor()
         {
             Sut.AddEventProcessor(Substitute.For<ISentryEventProcessor>());
-            Assert.Contains(Sut.EventProcessors, actual => actual.GetType() == typeof(MainSentryEventProcessor));
+            Assert.Contains(Sut.EventProcessors!, actual => actual.GetType() == typeof(MainSentryEventProcessor));
         }
 
         [Fact]
         public void AddEventProcessors_DoesNotExcludeMainProcessor()
         {
             Sut.AddEventProcessors(new[] { Substitute.For<ISentryEventProcessor>() });
-            Assert.Contains(Sut.EventProcessors, actual => actual.GetType() == typeof(MainSentryEventProcessor));
+            Assert.Contains(Sut.EventProcessors!, actual => actual.GetType() == typeof(MainSentryEventProcessor));
         }
 
         [Fact]
         public void AddEventProcessorProvider_DoesNotExcludeMainProcessor()
         {
             Sut.AddEventProcessorProvider(() => new[] { Substitute.For<ISentryEventProcessor>() });
-            Assert.Contains(Sut.EventProcessors, actual => actual.GetType() == typeof(MainSentryEventProcessor));
+            Assert.Contains(Sut.EventProcessors!, actual => actual.GetType() == typeof(MainSentryEventProcessor));
         }
 
         [Fact]
@@ -179,20 +194,20 @@ namespace Sentry.Tests
             Sut.AddEventProcessors(new[] { Substitute.For<ISentryEventProcessor>() });
             Sut.AddEventProcessor(Substitute.For<ISentryEventProcessor>());
 
-            Assert.IsType<MainSentryEventProcessor>(Sut.GetAllEventProcessors().Skip(1).First());
+            _ = Assert.IsType<MainSentryEventProcessor>(Sut.GetAllEventProcessors().Skip(1).First());
         }
 
         [Fact]
         public void GetAllEventProcessors_NoAdding_SecondReturned_MainSentryEventProcessor()
         {
-            Assert.IsType<MainSentryEventProcessor>(Sut.GetAllEventProcessors().Skip(1).First());
+            _ = Assert.IsType<MainSentryEventProcessor>(Sut.GetAllEventProcessors().Skip(1).First());
         }
 
         [Fact]
         public void UseStackTraceFactory_ReplacesStackTraceFactory()
         {
             var expected = Substitute.For<ISentryStackTraceFactory>();
-            Sut.UseStackTraceFactory(expected);
+            _ = Sut.UseStackTraceFactory(expected);
 
             Assert.Same(expected, Sut.SentryStackTraceFactory);
         }
@@ -204,7 +219,7 @@ namespace Sentry.Tests
             var exceptionProcessor = Sut.GetAllExceptionProcessors().OfType<MainExceptionProcessor>().Single();
 
             var expected = Substitute.For<ISentryStackTraceFactory>();
-            Sut.UseStackTraceFactory(expected);
+            _ = Sut.UseStackTraceFactory(expected);
 
             Assert.Same(expected, eventProcessor.SentryStackTraceFactoryAccessor());
             Assert.Same(expected, exceptionProcessor.SentryStackTraceFactoryAccessor());
@@ -213,7 +228,7 @@ namespace Sentry.Tests
         [Fact]
         public void UseStackTraceFactory_NotNull()
         {
-            Assert.Throws<ArgumentNullException>(() => Sut.UseStackTraceFactory(null));
+            _ = Assert.Throws<ArgumentNullException>(() => Sut.UseStackTraceFactory(null!));
         }
 
         [Fact]
@@ -223,19 +238,19 @@ namespace Sentry.Tests
             Sut.AddEventProcessors(new[] { Substitute.For<ISentryEventProcessor>() });
             Sut.AddEventProcessor(Substitute.For<ISentryEventProcessor>());
 
-            Assert.IsType<DuplicateEventDetectionEventProcessor>(Sut.GetAllEventProcessors().First());
+            _ = Assert.IsType<DuplicateEventDetectionEventProcessor>(Sut.GetAllEventProcessors().First());
         }
 
         [Fact]
         public void GetAllEventProcessors_NoAdding_FirstReturned_DuplicateDetectionProcessor()
         {
-            Assert.IsType<DuplicateEventDetectionEventProcessor>(Sut.GetAllEventProcessors().First());
+            _ = Assert.IsType<DuplicateEventDetectionEventProcessor>(Sut.GetAllEventProcessors().First());
         }
 
         [Fact]
         public void Integrations_Includes_AppDomainUnhandledExceptionIntegration()
         {
-            Assert.Contains(Sut.Integrations, i => i.GetType() == typeof(AppDomainUnhandledExceptionIntegration));
+            Assert.Contains(Sut.Integrations!, i => i.GetType() == typeof(AppDomainUnhandledExceptionIntegration));
         }
 
         [Theory]
@@ -246,7 +261,7 @@ namespace Sentry.Tests
         [InlineData("Newtonsoft.Json")]
         public void Integrations_Includes_MajorSystemPrefixes(string expected)
         {
-            Assert.Contains(Sut.InAppExclude, e => e == expected);
+            Assert.Contains(Sut.InAppExclude!, e => e == expected);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Sentry.Extensibility;
 
@@ -7,69 +8,60 @@ namespace Sentry.Internal
     internal class DuplicateEventDetectionEventProcessor : ISentryEventProcessor
     {
         private readonly SentryOptions _options;
-        private readonly ConditionalWeakTable<object, object> _capturedEvent = new ConditionalWeakTable<object, object>();
+        private readonly ConditionalWeakTable<object, object?> _capturedObjects = new();
 
         public DuplicateEventDetectionEventProcessor(SentryOptions options) => _options = options;
 
-        public SentryEvent Process(SentryEvent @event)
+        public SentryEvent? Process(SentryEvent @event)
         {
-            if (_capturedEvent.TryGetValue(@event, out _))
+            if (_options.DeduplicateMode.HasFlag(DeduplicateMode.SameEvent))
             {
-                _options.DiagnosticLogger?.LogDebug("Same event instance detected and discarded. EventId: {0}", @event.EventId);
-                return null;
+                if (_capturedObjects.TryGetValue(@event, out _))
+                {
+                    _options.DiagnosticLogger?.LogDebug("Same event instance detected and discarded. EventId: {0}", @event.EventId);
+                    return null;
+                }
+                _capturedObjects.Add(@event, null);
             }
-            _capturedEvent.Add(@event, null);
 
-            if (@event.Exception == null)
+            if (@event.Exception == null
+                || !IsDuplicate(@event.Exception))
             {
                 return @event;
             }
 
-            if (IsDuplicate(@event.Exception))
-            {
-                _options.DiagnosticLogger?.LogDebug("Duplicate Exception detected. Event {0} will be discarded.", @event.EventId);
-                return null;
-            }
-
-            return @event;
+            _options.DiagnosticLogger?.LogDebug("Duplicate Exception detected. Event {0} will be discarded.", @event.EventId);
+            return null;
         }
 
         private bool IsDuplicate(Exception ex)
         {
-            if (ex == null)
+            if (_options.DeduplicateMode.HasFlag(DeduplicateMode.SameExceptionInstance))
             {
-                return false;
-            }
-
-            while (true)
-            {
-                if (_capturedEvent.TryGetValue(ex, out _))
+                if (_capturedObjects.TryGetValue(ex, out _))
                 {
                     return true;
                 }
 
-                _capturedEvent.Add(ex, null);
-
-                if (ex is AggregateException aex)
-                {
-                    foreach (var aexInnerException in aex.InnerExceptions)
-                    {
-                        if (IsDuplicate(aexInnerException))
-                        {
-                            return true;
-                        }
-                    }
-                }
-                else if (ex.InnerException != null)
-                {
-                    if (IsDuplicate(ex.InnerException))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
+                _capturedObjects.Add(ex, null);
             }
+
+            if (_options.DeduplicateMode.HasFlag(DeduplicateMode.AggregateException)
+                && ex is AggregateException aex)
+            {
+                return aex.InnerExceptions.Any(IsDuplicate);
+            }
+
+            if (_options.DeduplicateMode.HasFlag(DeduplicateMode.InnerException)
+                && ex.InnerException != null)
+            {
+                if (IsDuplicate(ex.InnerException))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

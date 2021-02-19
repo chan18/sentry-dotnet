@@ -12,7 +12,7 @@ namespace Sentry.Tests
     public class HubExtensionsTests
     {
         public IHub Sut { get; set; } = Substitute.For<IHub>();
-        public Scope Scope { get; set; } = new Scope();
+        public Scope Scope { get; set; } = new();
 
         public HubExtensionsTests()
         {
@@ -23,19 +23,19 @@ namespace Sentry.Tests
         [Fact]
         public void PushAndLockScope_PushesNewScope()
         {
-            Sut.PushAndLockScope();
+            _ = Sut.PushAndLockScope();
 
-            Sut.Received(1).PushScope();
+            _ = Sut.Received(1).PushScope();
         }
 
         [Fact]
         public void PushAndLockScope_Disposed_DisposesInnerScope()
         {
             var disposable = Substitute.For<IDisposable>();
-            Sut.PushScope().Returns(disposable);
+            _ = Sut.PushScope().Returns(disposable);
 
-            var acutal = Sut.PushAndLockScope();
-            acutal.Dispose();
+            var actual = Sut.PushAndLockScope();
+            actual.Dispose();
 
             disposable.Received(1).Dispose();
         }
@@ -43,7 +43,7 @@ namespace Sentry.Tests
         [Fact]
         public void PushAndLockScope_CreatedScopeIsLocked()
         {
-            Sut.PushAndLockScope();
+            _ = Sut.PushAndLockScope();
 
             Assert.True(Scope.Locked);
         }
@@ -72,7 +72,7 @@ namespace Sentry.Tests
             const string expectedMessage = "message";
             Sut.AddBreadcrumb(expectedMessage);
 
-            Assert.Single(Scope.Breadcrumbs);
+            _ = Assert.Single(Scope.Breadcrumbs);
             var crumb = Scope.Breadcrumbs.Single();
             Assert.Equal(expectedMessage, crumb.Message);
             Assert.Null(crumb.Category);
@@ -87,7 +87,7 @@ namespace Sentry.Tests
         {
             var expectedTimestamp = DateTimeOffset.MaxValue;
             var clock = Substitute.For<ISystemClock>();
-            clock.GetUtcNow().Returns(expectedTimestamp);
+            _ = clock.GetUtcNow().Returns(expectedTimestamp);
 
             const string expectedMessage = "message";
             const string expectedType = "type";
@@ -107,7 +107,7 @@ namespace Sentry.Tests
                 expectedData,
                 expectedLevel);
 
-            Assert.Single(Scope.Breadcrumbs);
+            _ = Assert.Single(Scope.Breadcrumbs);
             var crumb = Scope.Breadcrumbs.First();
 
             Assert.Equal(expectedMessage, crumb.Message);

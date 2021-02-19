@@ -33,12 +33,12 @@ namespace Microsoft.AspNetCore.Builder
         {
             // Container is built so resolve a logger and modify the SDK internal logger
             var options = app.ApplicationServices.GetService<IOptions<SentryAspNetCoreOptions>>();
-            if (options?.Value is SentryAspNetCoreOptions o)
+            if (options?.Value is { } o)
             {
                 if (o.Debug && (o.DiagnosticLogger == null || o.DiagnosticLogger.GetType() == typeof(ConsoleDiagnosticLogger)))
                 {
                     var logger = app.ApplicationServices.GetRequiredService<ILogger<ISentryClient>>();
-                    o.DiagnosticLogger = new MelDiagnosticLogger(logger, o.DiagnosticsLevel);
+                    o.DiagnosticLogger = new MelDiagnosticLogger(logger, o.DiagnosticLevel);
                 }
 
                 var stackTraceFactory = app.ApplicationServices.GetService<ISentryStackTraceFactory>();
@@ -47,12 +47,12 @@ namespace Microsoft.AspNetCore.Builder
                     o.UseStackTraceFactory(stackTraceFactory);
                 }
 
-                if (app.ApplicationServices.GetService<IEnumerable<ISentryEventProcessor>>().Any())
+                if (app.ApplicationServices.GetService<IEnumerable<ISentryEventProcessor>>()?.Any() == true)
                 {
                     o.AddEventProcessorProvider(app.ApplicationServices.GetServices<ISentryEventProcessor>);
                 }
 
-                if (app.ApplicationServices.GetService<IEnumerable<ISentryEventExceptionProcessor>>().Any())
+                if (app.ApplicationServices.GetService<IEnumerable<ISentryEventExceptionProcessor>>()?.Any() == true)
                 {
                     o.AddExceptionProcessorProvider(app.ApplicationServices.GetServices<ISentryEventExceptionProcessor>);
                 }

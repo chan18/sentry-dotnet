@@ -1,14 +1,18 @@
 using System;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
+using FluentAssertions;
 using NSubstitute;
 using Sentry.Extensibility;
-using Sentry.Protocol;
+using Sentry.Internal.Http;
+using Sentry.Protocol.Envelopes;
 using Sentry.Testing;
 using Xunit;
+using Xunit.Abstractions;
 using static Sentry.Internal.Constants;
-using static Sentry.Protocol.Constants;
 using static Sentry.DsnSamples;
 
 namespace Sentry.Tests
@@ -16,6 +20,13 @@ namespace Sentry.Tests
     [Collection(nameof(SentrySdkCollection))]
     public class SentrySdkTests : SentrySdkTestFixture
     {
+        private readonly IDiagnosticLogger _logger;
+
+        public SentrySdkTests(ITestOutputHelper testOutputHelper)
+        {
+            _logger = new TestOutputDiagnosticLogger(testOutputHelper);
+        }
+
         [Fact]
         public void IsEnabled_StartsOfFalse()
         {
@@ -47,29 +58,25 @@ namespace Sentry.Tests
         [Fact]
         public void Init_BrokenDsn_Throws()
         {
-            Assert.Throws<UriFormatException>(() => SentrySdk.Init("invalid stuff"));
+            _ = Assert.Throws<UriFormatException>(() => SentrySdk.Init("invalid stuff"));
         }
 
         [Fact]
         public void Init_ValidDsnWithSecret_EnablesSdk()
         {
             using (SentrySdk.Init(ValidDsnWithSecret))
+            {
                 Assert.True(SentrySdk.IsEnabled);
+            }
         }
 
         [Fact]
         public void Init_ValidDsnWithoutSecret_EnablesSdk()
         {
             using (SentrySdk.Init(ValidDsnWithoutSecret))
+            {
                 Assert.True(SentrySdk.IsEnabled);
-        }
-
-        [Fact]
-        public void Init_DsnInstance_EnablesSdk()
-        {
-            var dsn = new Dsn(ValidDsnWithoutSecret);
-            using (SentrySdk.Init(dsn))
-                Assert.True(SentrySdk.IsEnabled);
+            }
         }
 
         [Fact]
@@ -80,21 +87,27 @@ namespace Sentry.Tests
                 ValidDsnWithSecret,
                 () =>
                 {
-                    using (SentrySdk.Init(c => { }))
+                    using (SentrySdk.Init(_ => { }))
+                    {
                         Assert.True(SentrySdk.IsEnabled);
+                    }
                 });
         }
 
         [Fact]
-        public void Init_CallbackWithoutDsn_InvalidDsnEnvironmentVariable_DisabledSdk()
+        public void Init_CallbackWithoutDsn_InvalidDsnEnvironmentVariable_Throws()
         {
             EnvironmentVariableGuard.WithVariable(
                 DsnEnvironmentVariable,
                 InvalidDsn,
                 () =>
                 {
-                    using (SentrySdk.Init(c => { }))
-                        Assert.False(SentrySdk.IsEnabled);
+                    Assert.Throws<ArgumentException>(() =>
+                    {
+                        using (SentrySdk.Init(_ => { }))
+                        {
+                        }
+                    });
                 });
         }
 
@@ -107,7 +120,9 @@ namespace Sentry.Tests
                 () =>
                 {
                     using (SentrySdk.Init())
+                    {
                         Assert.True(SentrySdk.IsEnabled);
+                    }
                 });
         }
 
@@ -130,11 +145,13 @@ namespace Sentry.Tests
         {
             EnvironmentVariableGuard.WithVariable(
                 DsnEnvironmentVariable,
-                DisableSdkDsnValue,
+                Constants.DisableSdkDsnValue,
                 () =>
                 {
                     using (SentrySdk.Init())
+                    {
                         Assert.False(SentrySdk.IsEnabled);
+                    }
                 });
         }
 
@@ -142,14 +159,16 @@ namespace Sentry.Tests
         public void Init_EmptyDsn_DisabledSdk()
         {
             using (SentrySdk.Init(string.Empty))
+            {
                 Assert.False(SentrySdk.IsEnabled);
+            }
         }
 
         [Fact]
         public void Init_EmptyDsn_LogsWarning()
         {
             var logger = Substitute.For<IDiagnosticLogger>();
-            logger.IsEnabled(SentryLevel.Warning).Returns(true);
+            _ = logger.IsEnabled(SentryLevel.Warning).Returns(true);
 
             var options = new SentryOptions
             {
@@ -167,7 +186,7 @@ namespace Sentry.Tests
         public void Init_EmptyDsnDisabledDiagnostics_DoesNotLogWarning()
         {
             var logger = Substitute.For<IDiagnosticLogger>();
-            logger.IsEnabled(SentryLevel.Warning).Returns(true);
+            _ = logger.IsEnabled(SentryLevel.Warning).Returns(true);
 
             var options = new SentryOptions
             {
@@ -190,7 +209,7 @@ namespace Sentry.Tests
             SentrySdk.ConfigureScope(p =>
             {
                 called = true;
-                Assert.Single(p.Breadcrumbs);
+                _ = Assert.Single(p.Breadcrumbs);
             });
             Assert.True(called);
             called = false;
@@ -205,6 +224,50 @@ namespace Sentry.Tests
 
             first.Dispose();
             second.Dispose();
+        }
+
+        [Fact(Skip = "Flaky")]
+        public async Task Init_WithCache_BlocksUntilExistingCacheIsFlushed()
+        {
+            // Arrange
+            using var cacheDirectory = new TempDirectory();
+
+            {
+                // Pre-populate cache
+                var initialInnerTransport = new FakeFailingTransport();
+                await using var initialTransport = new CachingTransport(initialInnerTransport, new SentryOptions
+                {
+                    DiagnosticLogger = _logger,
+                    Dsn = ValidDsnWithoutSecret,
+                    CacheDirectoryPath = cacheDirectory.Path
+                });
+
+                // Shutdown the worker to make sure nothing gets processed
+                await initialTransport.StopWorkerAsync();
+
+                for (var i = 0; i < 3; i++)
+                {
+                    using var envelope = Envelope.FromEvent(new SentryEvent());
+                    await initialTransport.SendEnvelopeAsync(envelope);
+                }
+            }
+
+            // Act
+            using var transport = new FakeTransport();
+            using var _ = SentrySdk.Init(o =>
+            {
+                o.Dsn = ValidDsnWithoutSecret;
+                o.DiagnosticLogger = _logger;
+                o.CacheDirectoryPath = cacheDirectory.Path;
+                o.InitCacheFlushTimeout = TimeSpan.FromSeconds(30);
+                o.Transport = transport;
+            });
+
+            // Assert
+            Directory
+                .EnumerateFiles(cacheDirectory.Path, "*", SearchOption.AllDirectories)
+                .ToArray()
+                .Should().BeEmpty();
         }
 
         [Fact]
@@ -227,14 +290,14 @@ namespace Sentry.Tests
             SentrySdk.ConfigureScope(p =>
             {
                 called = true;
-                Assert.Single(p.Breadcrumbs);
+                _ = Assert.Single(p.Breadcrumbs);
             });
             Assert.True(called);
             second.Dispose();
         }
 
         [Fact]
-        public Task FlushAsync_NotInit_NoOp() => SentrySdk.FlushAsync(TimeSpan.FromDays(1));
+        public async Task FlushAsync_NotInit_NoOp() => await SentrySdk.FlushAsync(TimeSpan.FromDays(1));
 
         [Fact]
         public void PushScope_InstanceOf_DisabledClient()
@@ -269,7 +332,7 @@ namespace Sentry.Tests
         public void PushScope_MultiCallParameterless_SameDisposableInstance() => Assert.Same(SentrySdk.PushScope(), SentrySdk.PushScope());
 
         [Fact]
-        public void AddBreadcrumb_NoClock_NoOp() => SentrySdk.AddBreadcrumb(message: null);
+        public void AddBreadcrumb_NoClock_NoOp() => SentrySdk.AddBreadcrumb(null);
 
         [Fact]
         public void AddBreadcrumb_WithClock_NoOp() => SentrySdk.AddBreadcrumb(clock: null, null);
@@ -336,7 +399,7 @@ namespace Sentry.Tests
             await SentrySdk.ConfigureScopeAsync(_ =>
             {
                 invoked = true;
-                return Task.CompletedTask;
+                return default;
             });
             Assert.False(invoked);
         }
@@ -360,14 +423,24 @@ namespace Sentry.Tests
             const string expected = "test";
             using (SentrySdk.Init(o =>
             {
-                o.Dsn = Valid;
+                o.Dsn = ValidDsnWithSecret;
                 o.BackgroundWorker = worker;
             }))
             {
                 SentrySdk.AddBreadcrumb(expected);
-                SentrySdk.CaptureMessage("message");
+                _ = SentrySdk.CaptureMessage("message");
 
-                worker.EnqueueEvent(Arg.Is<SentryEvent>(e => e.Breadcrumbs.Single().Message == expected));
+                _ = worker.EnqueueEnvelope(
+                       Arg.Is<Envelope>(e => e.Items
+                               .Select(i => i.Payload)
+                               .OfType<JsonSerializable>()
+                               .Select(i => i.Source)
+                               .OfType<SentryEvent>()
+                               .Single()
+                               .Breadcrumbs
+                               .Single()
+                               .Message == expected)
+                );
             }
         }
 
@@ -398,6 +471,21 @@ namespace Sentry.Tests
             var sentrySdk = typeof(SentrySdk).GetMembers(BindingFlags.Public | BindingFlags.Static);
 
             Assert.Empty(scopeManagement.Select(m => m.ToString()).Except(sentrySdk.Select(m => m.ToString())));
+        }
+
+        // Issue: https://github.com/getsentry/sentry-dotnet/issues/123
+        [Fact]
+        public void InitHub_NoDsn_DisposeDoesNotThrow()
+        {
+            var sut = SentrySdk.InitHub(new SentryOptions()) as IDisposable;
+            sut?.Dispose();
+        }
+
+        [Fact]
+        public async Task InitHub_NoDsn_FlushAsyncDoesNotThrow()
+        {
+            var sut = SentrySdk.InitHub(new SentryOptions());
+            await sut.FlushAsync(TimeSpan.FromDays(1));
         }
     }
 }

@@ -6,7 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.App">
+      <PrivateAssets Condition="'%(PackageReference.Version)' == ''">all</PrivateAssets>
+      <Publish Condition="'%(PackageReference.Version)' == ''">true</Publish>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -25,10 +28,6 @@
     <_ContentIncludedByDefault Remove="wwwroot\css\site.min.css" />
     <_ContentIncludedByDefault Remove="wwwroot\js\site.js" />
     <_ContentIncludedByDefault Remove="wwwroot\js\site.min.js" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="wwwroot" />
   </ItemGroup>
 
 </Project>

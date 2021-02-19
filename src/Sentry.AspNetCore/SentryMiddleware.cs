@@ -23,7 +23,7 @@ namespace Sentry.AspNetCore
     internal class SentryMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly Func<IHub> _hubAccessor;
+        private readonly Func<IHub> _getHub;
         private readonly SentryAspNetCoreOptions _options;
         private readonly IHostingEnvironment _hostingEnvironment;
         private readonly ILogger<SentryMiddleware> _logger;
@@ -37,7 +37,7 @@ namespace Sentry.AspNetCore
         /// Initializes a new instance of the <see cref="SentryMiddleware"/> class.
         /// </summary>
         /// <param name="next">The next.</param>
-        /// <param name="hubAccessor">The sentry Hub accessor.</param>
+        /// <param name="getHub">The sentry Hub accessor.</param>
         /// <param name="options">The options for this integration</param>
         /// <param name="hostingEnvironment">The hosting environment.</param>
         /// <param name="logger">Sentry logger.</param>
@@ -48,21 +48,18 @@ namespace Sentry.AspNetCore
         /// </exception>
         public SentryMiddleware(
             RequestDelegate next,
-            Func<IHub> hubAccessor,
+            Func<IHub> getHub,
             IOptions<SentryAspNetCoreOptions> options,
             IHostingEnvironment hostingEnvironment,
             ILogger<SentryMiddleware> logger)
         {
             _next = next ?? throw new ArgumentNullException(nameof(next));
-            _hubAccessor = hubAccessor ?? throw new ArgumentNullException(nameof(hubAccessor));
-            _options = options?.Value;
-            if (_options != null)
+            _getHub = getHub ?? throw new ArgumentNullException(nameof(getHub));
+            _options = options.Value;
+            var hub = _getHub();
+            foreach (var callback in _options.ConfigureScopeCallbacks)
             {
-                var hub = _hubAccessor();
-                foreach (var callback in _options.ConfigureScopeCallbacks)
-                {
-                    hub.ConfigureScope(callback);
-                }
+                hub.ConfigureScope(callback);
             }
             _hostingEnvironment = hostingEnvironment;
             _logger = logger;
@@ -75,7 +72,7 @@ namespace Sentry.AspNetCore
         /// <returns></returns>
         public async Task InvokeAsync(HttpContext context)
         {
-            var hub = _hubAccessor();
+            var hub = _getHub();
             if (!hub.IsEnabled)
             {
                 await _next(context).ConfigureAwait(false);
@@ -84,20 +81,18 @@ namespace Sentry.AspNetCore
 
             using (hub.PushAndLockScope())
             {
-                if (_options != null)
+                if (_options.MaxRequestBodySize != RequestSize.None)
                 {
-                    if (_options.MaxRequestBodySize != RequestSize.None)
+                    context.Request.EnableBuffering();
+                }
+
+                if (_options.FlushOnCompletedRequest)
+                {
+                    context.Response.OnCompleted(async () =>
                     {
-                        context.Request.EnableBuffering();
-                    }
-                    if (_options.FlushOnCompletedRequest)
-                    {
-                        context.Response.OnCompleted(async () =>
-                        {
-                            // Serverless environments flush the queue at the end of each request
-                            await hub.FlushAsync(timeout: _options.FlushTimeout).ConfigureAwait(false);
-                        });
-                    }
+                        // Serverless environments flush the queue at the end of each request
+                        await hub.FlushAsync(timeout: _options.FlushTimeout).ConfigureAwait(false);
+                    });
                 }
 
                 hub.ConfigureScope(scope =>
@@ -109,14 +104,15 @@ namespace Sentry.AspNetCore
                     // In case of event, all data made available through the HTTP Context at the time of the
                     // event creation will be sent to Sentry
 
-                    scope.OnEvaluating += (_, __) => PopulateScope(context, scope);
+                    scope.OnEvaluating += (_, _) => PopulateScope(context, scope);
                 });
+
                 try
                 {
                     await _next(context).ConfigureAwait(false);
 
                     // When an exception was handled by other component (i.e: UseExceptionHandler feature).
-                    var exceptionFeature = context.Features.Get<IExceptionHandlerFeature>();
+                    var exceptionFeature = context.Features.Get<IExceptionHandlerFeature?>();
                     if (exceptionFeature?.Error != null)
                     {
                         CaptureException(exceptionFeature.Error);
@@ -133,11 +129,11 @@ namespace Sentry.AspNetCore
                 {
                     var evt = new SentryEvent(e);
 
-                    _logger?.LogTrace("Sending event '{SentryEvent}' to Sentry.", evt);
+                    _logger.LogTrace("Sending event '{SentryEvent}' to Sentry.", evt);
 
                     var id = hub.CaptureEvent(evt);
 
-                    _logger?.LogInformation("Event '{id}' queued.", id);
+                    _logger.LogInformation("Event '{id}' queued.", id);
                 }
             }
         }
@@ -146,16 +142,20 @@ namespace Sentry.AspNetCore
         {
             scope.Sdk.Name = Constants.SdkName;
             scope.Sdk.Version = NameAndVersion.Version;
-            scope.Sdk.AddPackage(ProtocolPackageName, NameAndVersion.Version);
 
-            if (_hostingEnvironment != null)
+            if (NameAndVersion.Version is { } version)
             {
-                scope.SetWebRoot(_hostingEnvironment.WebRootPath);
+                scope.Sdk.AddPackage(ProtocolPackageName, version);
+            }
+
+            if (_hostingEnvironment.WebRootPath is { } webRootPath)
+            {
+                scope.SetWebRoot(webRootPath);
             }
 
             scope.Populate(context, _options);
 
-            if (_options?.IncludeActivityData == true)
+            if (_options.IncludeActivityData && Activity.Current is not null)
             {
                 scope.Populate(Activity.Current);
             }

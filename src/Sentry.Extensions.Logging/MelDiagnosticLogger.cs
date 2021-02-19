@@ -1,7 +1,6 @@
 using System;
 using Microsoft.Extensions.Logging;
 using Sentry.Extensibility;
-using Sentry.Protocol;
 
 namespace Sentry.Extensions.Logging
 {
@@ -25,7 +24,6 @@ namespace Sentry.Extensions.Logging
             _level = level;
         }
 
-
         /// <summary>
         /// Whether this logger is enabled for the provided level
         /// </summary>
@@ -40,7 +38,7 @@ namespace Sentry.Extensions.Logging
         /// <summary>
         /// Logs the message.
         /// </summary>
-        public void Log(SentryLevel logLevel, string message, Exception exception = null, params object[] args)
+        public void Log(SentryLevel logLevel, string message, Exception? exception = null, params object?[] args)
         {
             if (!IsEnabled(logLevel))
             {

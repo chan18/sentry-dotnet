@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Sentry.Extensibility;
 using Sentry.Infrastructure;
 using Sentry.Protocol;
@@ -17,7 +16,7 @@ namespace Sentry.Serilog
     /// <inheritdoc cref="ILogEventSink" />
     internal sealed class SentrySink : ILogEventSink, IDisposable
     {
-        private readonly IDisposable _sdkDisposable;
+        private readonly IDisposable? _sdkDisposable;
         private readonly SentrySerilogOptions _options;
 
         internal static readonly SdkVersion NameAndVersion
@@ -30,7 +29,7 @@ namespace Sentry.Serilog
 
         public SentrySink(
             SentrySerilogOptions options,
-            IDisposable sdkDisposable)
+            IDisposable? sdkDisposable)
             : this(
                 options,
                 () => HubAdapter.Instance,
@@ -42,13 +41,9 @@ namespace Sentry.Serilog
         internal SentrySink(
             SentrySerilogOptions options,
             Func<IHub> hubAccessor,
-            IDisposable sdkDisposable,
+            IDisposable? sdkDisposable,
             ISystemClock clock)
         {
-            Debug.Assert(options != null);
-            Debug.Assert(hubAccessor != null);
-            Debug.Assert(clock != null);
-
             _options = options;
             _hubAccessor = hubAccessor;
             _clock = clock;
@@ -57,18 +52,23 @@ namespace Sentry.Serilog
 
         public void Emit(LogEvent logEvent)
         {
-            if (logEvent == null
-                || logEvent.Properties.TryGetValue("SourceContext", out var prop)
+            string? context = null;
+
+            if (logEvent.Properties.TryGetValue("SourceContext", out var prop)
                 && prop is ScalarValue scalar
-                && scalar.Value is string context
-                && (context.StartsWith("Sentry.")
-                    || string.Equals(context, "Sentry", StringComparison.Ordinal)))
+                && scalar.Value is string sourceContextValue)
             {
-                return;
+                if (sourceContextValue.StartsWith("Sentry.")
+                    || string.Equals(sourceContextValue, "Sentry", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                context = sourceContextValue;
             }
 
             var hub = _hubAccessor();
-            if (hub == null || !hub.IsEnabled)
+            if (hub is null || !hub.IsEnabled)
             {
                 return;
             }
@@ -81,13 +81,8 @@ namespace Sentry.Serilog
             {
                 var evt = new SentryEvent(exception)
                 {
-                    Sdk =
-                    {
-                        Name = Constants.SdkName,
-                        Version = NameAndVersion.Version
-                    },
-                    Message = null,
-                    LogEntry = new LogEntry
+                    Logger = context,
+                    Message = new SentryMessage
                     {
                         Formatted = formatted,
                         Message = template
@@ -95,16 +90,26 @@ namespace Sentry.Serilog
                     Level = logEvent.Level.ToSentryLevel()
                 };
 
-                evt.Sdk.AddPackage(ProtocolPackageName, NameAndVersion.Version);
+                if (evt.Sdk is {} sdk)
+                {
+                    sdk.Name = Constants.SdkName;
+                    sdk.Version = NameAndVersion.Version;
+
+                    if (NameAndVersion.Version is {} version)
+                    {
+                        sdk.AddPackage(ProtocolPackageName, version);
+                    }
+                }
+
                 evt.SetExtras(GetLoggingEventProperties(logEvent));
 
-                hub.CaptureEvent(evt);
+                _ = hub.CaptureEvent(evt);
             }
 
             // Even if it was sent as event, add breadcrumb so next event includes it
             if (logEvent.Level >= _options.MinimumBreadcrumbLevel)
             {
-                Dictionary<string, string> data = null;
+                Dictionary<string, string> ?data = null;
                 if (exception != null && !string.IsNullOrWhiteSpace(formatted))
                 {
                     // Exception.Message won't be used as Breadcrumb message
@@ -117,15 +122,16 @@ namespace Sentry.Serilog
 
                 hub.AddBreadcrumb(
                     _clock,
-                    message: string.IsNullOrWhiteSpace(formatted)
-                        ? exception?.Message
+                    string.IsNullOrWhiteSpace(formatted)
+                        ? exception?.Message ?? ""
                         : formatted,
+                    context,
                     data: data,
                     level: logEvent.Level.ToBreadcrumbLevel());
             }
         }
 
-        private IEnumerable<KeyValuePair<string, object>> GetLoggingEventProperties(LogEvent logEvent)
+        private IEnumerable<KeyValuePair<string, object?>> GetLoggingEventProperties(LogEvent logEvent)
         {
             var properties = logEvent.Properties;
 
@@ -134,11 +140,11 @@ namespace Sentry.Serilog
                 var value = property.Value;
                 if (value is ScalarValue scalarValue)
                 {
-                    yield return new KeyValuePair<string, object>(property.Key, scalarValue.Value);
+                    yield return new KeyValuePair<string, object?>(property.Key, scalarValue.Value);
                 }
                 else if (value != null)
                 {
-                    yield return new KeyValuePair<string, object>(property.Key, value);
+                    yield return new KeyValuePair<string, object?>(property.Key, value);
                 }
             }
         }

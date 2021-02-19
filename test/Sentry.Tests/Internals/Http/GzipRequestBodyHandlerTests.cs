@@ -23,24 +23,26 @@ namespace Sentry.Tests.Internals.Http
 
             public Fixture()
             {
-                Message = new HttpRequestMessage(HttpMethod.Post, DsnSamples.Valid.SentryUri)
+                var uri = Dsn.Parse(DsnSamples.ValidDsnWithSecret).GetStoreEndpointUri();
+
+                Message = new HttpRequestMessage(HttpMethod.Post, uri)
                 {
                     Content = new StringContent(new string('a', MessageCharCount))
                 };
             }
 
             public HttpMessageInvoker GetSut()
-                => new HttpMessageInvoker(new GzipRequestBodyHandler(Handler, CompressionLevel));
+                => new(new GzipRequestBodyHandler(Handler, CompressionLevel));
         }
 
-        private readonly Fixture _fixture = new Fixture();
+        private readonly Fixture _fixture = new();
 
         [Fact]
         public async Task SendAsync_Content_Compressed()
         {
             var sut = _fixture.GetSut();
 
-            await sut.SendAsync(_fixture.Message, None);
+            _ = await sut.SendAsync(_fixture.Message, None);
 
             var gzippedContent = await _fixture.Message.Content.ReadAsByteArrayAsync();
             Assert.True(gzippedContent.Length < 100);
@@ -51,9 +53,9 @@ namespace Sentry.Tests.Internals.Http
         {
             var sut = _fixture.GetSut();
 
-            await sut.SendAsync(_fixture.Message, None);
+            _ = await sut.SendAsync(_fixture.Message, None);
 
-            Assert.IsType<GzipRequestBodyHandler.GzipContent>(_fixture.Message.Content);
+            _ = Assert.IsType<GzipRequestBodyHandler.GzipContent>(_fixture.Message.Content);
         }
 
         [Fact]
@@ -63,7 +65,7 @@ namespace Sentry.Tests.Internals.Http
 
             var sut = _fixture.GetSut();
 
-            await sut.SendAsync(_fixture.Message, None);
+            _ = await sut.SendAsync(_fixture.Message, None);
 
             Assert.Contains(_fixture.Message.Content.Headers,
                 p => p.Key == "test" && p.Value.Count() == 2);
@@ -74,7 +76,7 @@ namespace Sentry.Tests.Internals.Http
         {
             var sut = _fixture.GetSut();
 
-            await sut.SendAsync(_fixture.Message, None);
+            _ = await sut.SendAsync(_fixture.Message, None);
 
             Assert.Equal("gzip", _fixture.Message.Content.Headers.ContentEncoding.First());
         }
@@ -82,9 +84,9 @@ namespace Sentry.Tests.Internals.Http
         [Fact]
         public void Ctor_NoCompression_ThrowsInvalidOperationException()
         {
-            Assert.Throws<InvalidOperationException>(
-                () => new GzipRequestBodyHandler(Substitute.For<HttpMessageHandler>(),
-                    CompressionLevel.NoCompression));
+            _ = Assert.Throws<InvalidOperationException>(
+                    () => new GzipRequestBodyHandler(Substitute.For<HttpMessageHandler>(),
+                        CompressionLevel.NoCompression));
         }
     }
 }

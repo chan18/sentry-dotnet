@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using Sentry.Protocol;
 
 namespace Sentry
 {
@@ -35,14 +34,31 @@ namespace Sentry
             string message,
             SentryLevel level = SentryLevel.Info)
         {
-            return !client.IsEnabled
-                   || string.IsNullOrWhiteSpace(message)
+            return !client.IsEnabled || string.IsNullOrWhiteSpace(message)
                 ? new SentryId()
-                : client.CaptureEvent(new SentryEvent
-                {
-                    Message = message,
-                    Level = level
-                });
+                : client.CaptureEvent(
+                    new SentryEvent
+                    {
+                        Message = message,
+                        Level = level
+                    }
+                );
+        }
+
+        /// <summary>
+        /// Captures a user feedback.
+        /// </summary>
+        /// <param name="client"></param>
+        /// <param name="eventId">The event Id.</param>
+        /// <param name="email">The user email.</param>
+        /// <param name="comments">The user comments.</param>
+        /// <param name="name">The optional username.</param>
+        public static void CaptureUserFeedback(this ISentryClient client, SentryId eventId, string email, string comments, string? name = null)
+        {
+            if (client.IsEnabled)
+            {
+                client.CaptureUserFeedback(new UserFeedback(eventId, name, email, comments));
+            }
         }
     }
 }

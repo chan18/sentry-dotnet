@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sentry.Infrastructure;
@@ -16,8 +15,8 @@ namespace Sentry.Extensions.Logging
     {
         private readonly ISystemClock _clock;
         private readonly SentryLoggingOptions _options;
-        private readonly IDisposable _scope;
-        private readonly IDisposable _disposableHub;
+        private readonly IDisposable? _scope;
+        private readonly IDisposable? _disposableHub;
 
         internal IHub Hub { get; }
 
@@ -42,10 +41,6 @@ namespace Sentry.Extensions.Logging
             ISystemClock clock,
             SentryLoggingOptions options)
         {
-            Debug.Assert(options != null);
-            Debug.Assert(clock != null);
-            Debug.Assert(hub != null);
-
             _disposableHub = hub as IDisposable;
 
             Hub = hub;
@@ -57,9 +52,16 @@ namespace Sentry.Extensions.Logging
                 _scope = hub.PushScope();
                 hub.ConfigureScope(s =>
                 {
-                    s.Sdk.Name = Constants.SdkName;
-                    s.Sdk.Version = NameAndVersion.Version;
-                    s.Sdk.AddPackage(ProtocolPackageName, NameAndVersion.Version);
+                    if (s.Sdk is { } sdk)
+                    {
+                        sdk.Name = Constants.SdkName;
+                        sdk.Version = NameAndVersion.Version;
+
+                        if (NameAndVersion.Version is {} version)
+                        {
+                            sdk.AddPackage(ProtocolPackageName, version);
+                        }
+                    }
                 });
 
                 // Add scope configuration to hub from options

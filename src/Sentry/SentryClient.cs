@@ -1,19 +1,21 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Sentry.Extensibility;
 using Sentry.Internal;
 using Sentry.Protocol;
+using Sentry.Protocol.Envelopes;
 
 namespace Sentry
 {
     /// <summary>
-    /// Sentry client used to send events to Sentry
+    /// Sentry client used to send events to Sentry.
     /// </summary>
     /// <remarks>
     /// This client captures events by queueing those to its
-    /// internal background worker which sends events to Sentry
+    /// internal background worker which sends events to Sentry.
     /// </remarks>
     /// <inheritdoc cref="ISentryClient" />
     /// <inheritdoc cref="IDisposable" />
@@ -22,20 +24,17 @@ namespace Sentry
         private volatile bool _disposed;
         private readonly SentryOptions _options;
 
-        private readonly Lazy<Random> _random = new Lazy<Random>(() => new Random(), LazyThreadSafetyMode.PublicationOnly);
-        internal Random Random => _random.Value;
-
-        // Internal for testing
+        // Internal for testing.
         internal IBackgroundWorker Worker { get; }
 
-        /// <inheritdoc />
         /// <summary>
-        /// Whether the client is enabled
+        /// Whether the client is enabled.
         /// </summary>
+        /// <inheritdoc />
         public bool IsEnabled => true;
 
         /// <summary>
-        /// Creates a new instance of <see cref="SentryClient"/>
+        /// Creates a new instance of <see cref="SentryClient"/>.
         /// </summary>
         /// <param name="options">The configuration for this client.</param>
         public SentryClient(SentryOptions options)
@@ -43,7 +42,7 @@ namespace Sentry
 
         internal SentryClient(
             SentryOptions options,
-            IBackgroundWorker worker)
+            IBackgroundWorker? worker)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
 
@@ -61,17 +60,8 @@ namespace Sentry
             }
         }
 
-        /// <summary>
-        /// Queues the event to be sent to Sentry
-        /// </summary>
-        /// <remarks>
-        /// An optional scope, if provided, will be applied to the event.
-        /// </remarks>
-        /// <param name="event">The event to send to Sentry.</param>
-        /// <param name="scope">The optional scope to augment the event with.</param>
-        /// <returns></returns>
         /// <inheritdoc />
-        public SentryId CaptureEvent(SentryEvent @event, Scope scope = null)
+        public SentryId CaptureEvent(SentryEvent? @event, Scope? scope = null)
         {
             if (_disposed)
             {
@@ -89,9 +79,84 @@ namespace Sentry
             }
             catch (Exception e)
             {
-                _options.DiagnosticLogger?.LogError("An error occured when capturing the event {0}.", e, @event.EventId);
+                _options.DiagnosticLogger?.LogError("An error occurred when capturing the event {0}.", e, @event.EventId);
                 return SentryId.Empty;
             }
+        }
+
+        /// <inheritdoc />
+        public void CaptureUserFeedback(UserFeedback userFeedback)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(SentryClient));
+            }
+
+            if (userFeedback.EventId.Equals(SentryId.Empty))
+            {
+                // Ignore the user feedback if EventId is empty
+                _options.DiagnosticLogger?.LogWarning("User feedback dropped due to empty id.");
+                return;
+            }
+
+            CaptureEnvelope(Envelope.FromUserFeedback(userFeedback));
+        }
+
+        /// <inheritdoc />
+        public void CaptureTransaction(ITransaction transaction)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(SentryClient));
+            }
+
+            if (transaction.SpanId.Equals(SpanId.Empty))
+            {
+                _options.DiagnosticLogger?.LogWarning(
+                    "Transaction dropped due to empty id."
+                );
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(transaction.Name) ||
+                string.IsNullOrWhiteSpace(transaction.Operation))
+            {
+                _options.DiagnosticLogger?.LogWarning(
+                    "Transaction discarded due to one or more required fields missing."
+                );
+
+                return;
+            }
+
+            // Unfinished transaction can only happen if the user calls this method instead of
+            // transaction.Finish().
+            // We still send these transactions over, but warn the user not to do it.
+            if (!transaction.IsFinished)
+            {
+                _options.DiagnosticLogger?.LogWarning(
+                    "Capturing a transaction which has not been finished. " +
+                    "Please call transaction.Finish() instead of hub.CaptureTransaction(transaction) " +
+                    "to properly finalize the transaction and send it to Sentry."
+                );
+            }
+
+            // Sampling decision MUST have been made at this point
+            Debug.Assert(
+                transaction.IsSampled != null,
+                "Attempt to capture transaction without sampling decision."
+            );
+
+            if (transaction.IsSampled != true)
+            {
+                _options.DiagnosticLogger?.LogDebug(
+                    "Transaction dropped by sampling."
+                );
+
+                return;
+            }
+
+            CaptureEnvelope(Envelope.FromTransaction(transaction));
         }
 
         /// <summary>
@@ -101,17 +166,29 @@ namespace Sentry
         /// <returns>A task to await for the flush operation.</returns>
         public Task FlushAsync(TimeSpan timeout) => Worker.FlushAsync(timeout);
 
-        private SentryId DoSendEvent(SentryEvent @event, Scope scope)
+        // TODO: this method needs to be refactored, it's really hard to analyze nullability
+        private SentryId DoSendEvent(SentryEvent @event, Scope? scope)
         {
-            if (_options.SampleRate is float sample)
+            if (_options.SampleRate != null)
             {
-                if (Random.NextDouble() > sample)
+                if (SynchronizedRandom.NextDouble() > _options.SampleRate.Value)
                 {
                     _options.DiagnosticLogger?.LogDebug("Event sampled.");
                     return SentryId.Empty;
                 }
             }
-            scope = scope ?? new Scope(_options);
+
+            if (@event.Exception != null && _options.ExceptionFilters?.Length > 0)
+            {
+                if (_options.ExceptionFilters.Any(f => f.Filter(@event.Exception)))
+                {
+                    _options.DiagnosticLogger?.LogInfo(
+                        "Event with exception of type '{0}' was dropped by an exception filter.", @event.Exception.GetType());
+                    return SentryId.Empty;
+                }
+            }
+
+            scope ??= new Scope(_options);
 
             _options.DiagnosticLogger?.LogInfo("Capturing event.");
 
@@ -136,35 +213,52 @@ namespace Sentry
                 }
             }
 
+            SentryEvent? processedEvent = @event;
+
             foreach (var processor in scope.GetAllEventProcessors())
             {
-                @event = processor.Process(@event);
-                if (@event == null)
+                processedEvent = processor.Process(processedEvent);
+                if (processedEvent == null)
                 {
                     _options.DiagnosticLogger?.LogInfo("Event dropped by processor {0}", processor.GetType().Name);
                     return SentryId.Empty;
                 }
             }
 
-            @event = BeforeSend(@event);
-            if (@event == null) // Rejected event
+            processedEvent = BeforeSend(processedEvent);
+            if (processedEvent == null) // Rejected event
             {
                 _options.DiagnosticLogger?.LogInfo("Event dropped by BeforeSend callback.");
                 return SentryId.Empty;
             }
 
-            if (Worker.EnqueueEvent(@event))
-            {
-                _options.DiagnosticLogger?.LogDebug("Event queued up.");
-                return @event.EventId;
-            }
-
-            _options.DiagnosticLogger?.LogWarning("The attempt to queue the event failed. Items in queue: {0}",
-                Worker.QueuedItems);
-            return SentryId.Empty;
+            return CaptureEnvelope(Envelope.FromEvent(processedEvent, scope.Attachments))
+                ? processedEvent.EventId
+                : SentryId.Empty;
         }
 
-        private SentryEvent BeforeSend(SentryEvent @event)
+        /// <summary>
+        /// Capture an envelope and queue it.
+        /// </summary>
+        /// <param name="envelope">The envelope.</param>
+        /// <returns>true if the enveloped was queued, false otherwise.</returns>
+        private bool CaptureEnvelope(Envelope envelope)
+        {
+            if (Worker.EnqueueEnvelope(envelope))
+            {
+                _options.DiagnosticLogger?.LogDebug("Envelope queued up.");
+                return true;
+            }
+
+            _options.DiagnosticLogger?.LogWarning(
+                "The attempt to queue the event failed. Items in queue: {0}",
+                Worker.QueuedItems
+            );
+
+            return false;
+        }
+
+        private SentryEvent? BeforeSend(SentryEvent? @event)
         {
             if (_options.BeforeSend == null)
             {
@@ -174,20 +268,23 @@ namespace Sentry
             _options.DiagnosticLogger?.LogDebug("Calling the BeforeSend callback");
             try
             {
-                @event = _options.BeforeSend?.Invoke(@event);
+                @event = _options.BeforeSend?.Invoke(@event!);
             }
             catch (Exception e)
             {
                 _options.DiagnosticLogger?.LogError("The BeforeSend callback threw an exception. It will be added as breadcrumb and continue.", e);
-
-                @event.AddBreadcrumb(
+                var data = new Dictionary<string, string>
+                {
+                    {"message", e.Message}
+                };
+                if(e.StackTrace is not null)
+                {
+                    data.Add("stackTrace", e.StackTrace);
+                }
+                @event?.AddBreadcrumb(
                     "BeforeSend callback failed.",
                     category: "SentryClient",
-                    data: new Dictionary<string, string>
-                    {
-                        {"message", e.Message},
-                        {"stackTrace", e.StackTrace}
-                    },
+                    data: data,
                     level: BreadcrumbLevel.Error);
             }
 

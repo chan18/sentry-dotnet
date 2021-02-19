@@ -1,7 +1,6 @@
 #if !NETCOREAPP // Test runner fails when running on netcoreapp
 using System;
 using System.Threading;
-using Sentry.Integrations;
 using Sentry.Internal;
 using Sentry.PlatformAbstractions;
 using Xunit;
@@ -17,7 +16,7 @@ namespace Sentry.Tests.Integrations
             if (!Runtime.Current.IsMono())
             {
                 var evt = new ManualResetEventSlim(false);
-                AppDomainAdapter.Instance.UnhandledException += (sender, args) =>
+                AppDomainAdapter.Instance.UnhandledException += (_, _) =>
                 {
                     evt.Set();
                 };

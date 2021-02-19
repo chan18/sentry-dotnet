@@ -16,7 +16,7 @@ namespace Sentry.AspNetCore.Tests
     public class SentryWebHostBuilderExtensionsTests
     {
         public IWebHostBuilder WebHostBuilder { get; set; } = Substitute.For<IWebHostBuilder>();
-        public ServiceCollection Services { get; set; } = new ServiceCollection();
+        public ServiceCollection Services { get; set; } = new();
         public IConfiguration Configuration { get; set; } = Substitute.For<IConfiguration>();
         public IHostingEnvironment HostingEnvironment { get; set; } = Substitute.For<IHostingEnvironment>();
 
@@ -40,28 +40,28 @@ namespace Sentry.AspNetCore.Tests
         [Theory, MemberData(nameof(ExpectedServices))]
         public void UseSentry_ValidDsnString_ServicesRegistered(Action<IServiceCollection> assert)
         {
-            WebHostBuilder.UseSentry(DsnSamples.ValidDsnWithoutSecret);
+            _ = WebHostBuilder.UseSentry(DsnSamples.ValidDsnWithoutSecret);
             assert(Services);
         }
 
         [Theory, MemberData(nameof(ExpectedServices))]
         public void UseSentry_Parameterless_ServicesRegistered(Action<IServiceCollection> assert)
         {
-            WebHostBuilder.UseSentry();
+            _ = WebHostBuilder.UseSentry();
             assert(Services);
         }
 
         [Theory, MemberData(nameof(ExpectedServices))]
         public void UseSentry_DisableDsnString_ServicesRegistered(Action<IServiceCollection> assert)
         {
-            WebHostBuilder.UseSentry(Protocol.Constants.DisableSdkDsnValue);
+            _ = WebHostBuilder.UseSentry(Sentry.Constants.DisableSdkDsnValue);
             assert(Services);
         }
 
         [Theory, MemberData(nameof(ExpectedServices))]
         public void UseSentry_Callback_ServicesRegistered(Action<IServiceCollection> assert)
         {
-            WebHostBuilder.UseSentry(o => o.InitializeSdk = false);
+            _ = WebHostBuilder.UseSentry(o => o.InitializeSdk = false);
             assert(Services);
         }
 

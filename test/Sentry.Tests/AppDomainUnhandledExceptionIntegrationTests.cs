@@ -3,6 +3,9 @@ using NSubstitute;
 using Sentry.Integrations;
 using Sentry.Internal;
 using Xunit;
+using System.Linq;
+using Sentry.Extensibility;
+using Sentry.Protocol;
 
 namespace Sentry.Tests
 {
@@ -16,11 +19,11 @@ namespace Sentry.Tests
             public Fixture() => Hub.IsEnabled.Returns(true);
 
             public AppDomainUnhandledExceptionIntegration GetSut()
-                => new AppDomainUnhandledExceptionIntegration(AppDomain);
+                => new(AppDomain);
         }
 
-        private readonly Fixture _fixture = new Fixture();
-        public SentryOptions SentryOptions { get; set; } = new SentryOptions();
+        private readonly Fixture _fixture = new();
+        public SentryOptions SentryOptions { get; set; } = new();
 
         [Fact]
         public void Handle_WithException_CaptureEvent()
@@ -30,7 +33,7 @@ namespace Sentry.Tests
 
             sut.Handle(this, new UnhandledExceptionEventArgs(new Exception(), true));
 
-            _fixture.Hub.Received(1).CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.Received(1).CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         [Fact]
@@ -41,7 +44,7 @@ namespace Sentry.Tests
 
             sut.Handle(this, new UnhandledExceptionEventArgs(new object(), true));
 
-            _fixture.Hub.DidNotReceive().CaptureEvent(Arg.Any<SentryEvent>());
+            _ = _fixture.Hub.DidNotReceive().CaptureEvent(Arg.Any<SentryEvent>());
         }
 
         [Fact]
@@ -54,6 +57,25 @@ namespace Sentry.Tests
 
             var disposableHub = _fixture.Hub as IDisposable;
             disposableHub.Received(1).Dispose();
+        }
+
+        [Fact]
+        public void Handle_TerminatingTrue_IsHandledFalse()
+        {
+            var sut = _fixture.GetSut();
+            sut.Register(_fixture.Hub, SentryOptions);
+
+            var exception = new Exception();
+            sut.Handle(this, new UnhandledExceptionEventArgs(exception, true));
+            Assert.False((bool)exception.Data[Mechanism.HandledKey]);
+            Assert.True(exception.Data.Contains(Mechanism.MechanismKey));
+
+            var stackTraceFactory = Substitute.For<ISentryStackTraceFactory>();
+            var exceptionProcessor = new MainExceptionProcessor(SentryOptions, () => stackTraceFactory);
+            var @event = new SentryEvent(exception);
+
+            exceptionProcessor.Process(exception, @event);
+            Assert.NotNull(@event.SentryExceptions.ToList().Single(p => p.Mechanism.Handled == false));
         }
 
         [Fact]

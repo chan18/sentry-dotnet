@@ -1,9 +1,9 @@
-using System;
+using System.Collections.Generic;
 
 namespace Sentry.Internal
 {
     internal interface IInternalScopeManager : ISentryScopeManager
     {
-        Tuple<Scope, ISentryClient> GetCurrent();
+        KeyValuePair<Scope, ISentryClient> GetCurrent();
     }
 }

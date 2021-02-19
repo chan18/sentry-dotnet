@@ -3,7 +3,7 @@ using Sentry.Testing;
 using Sentry.Tests.Helpers.Reflection;
 using Xunit;
 using static Sentry.Internal.Constants;
-using static Sentry.Protocol.Constants;
+using static Sentry.Constants;
 
 namespace Sentry.Tests.Internals
 {
@@ -88,7 +88,7 @@ namespace Sentry.Tests.Internals
 
             var asm = AssemblyCreationHelper.CreateAssemblyWithDsnAttribute(expected);
 
-            // Not resposible to do validation, returns raw string
+            // Not responsible to do validation, returns raw string
             var actual = DsnLocator.FindDsn(asm);
 
             Assert.Equal(expected, actual);

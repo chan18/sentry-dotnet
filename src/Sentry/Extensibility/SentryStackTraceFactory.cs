@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using Sentry.Protocol;
 
@@ -16,9 +17,8 @@ namespace Sentry.Extensibility
         private readonly SentryOptions _options;
 
         /// <summary>
-        /// Creates an instance of <see cref="SentryStackTraceFactory"/>
+        /// Creates an instance of <see cref="SentryStackTraceFactory"/>.
         /// </summary>
-        /// <param name="options"></param>
         public SentryStackTraceFactory(SentryOptions options) => _options = options;
 
         /// <summary>
@@ -26,7 +26,7 @@ namespace Sentry.Extensibility
         /// </summary>
         /// <param name="exception">The exception to create the stacktrace from.</param>
         /// <returns>A Sentry stack trace.</returns>
-        public SentryStackTrace Create(Exception exception = null)
+        public virtual SentryStackTrace? Create(Exception? exception = null)
         {
             var isCurrentStackTrace = exception == null && _options.AttachStacktrace;
 
@@ -46,8 +46,10 @@ namespace Sentry.Extensibility
         /// </summary>
         /// <param name="exception">The exception.</param>
         /// <returns>A StackTrace.</returns>
-        protected virtual StackTrace CreateStackTrace(Exception exception) =>
-            exception == null ? new StackTrace(true) : new StackTrace(exception, true);
+        protected virtual StackTrace CreateStackTrace(Exception? exception) =>
+            exception is null
+                ? new StackTrace(true)
+                : new StackTrace(exception, true);
 
         /// <summary>
         /// Creates a <see cref="SentryStackTrace"/> from the <see cref="StackTrace"/>.
@@ -55,7 +57,7 @@ namespace Sentry.Extensibility
         /// <param name="stackTrace">The stack trace.</param>
         /// <param name="isCurrentStackTrace">Whether this is the current stack trace.</param>
         /// <returns>SentryStackTrace</returns>
-        internal SentryStackTrace Create(StackTrace stackTrace, bool isCurrentStackTrace)
+        internal SentryStackTrace? Create(StackTrace stackTrace, bool isCurrentStackTrace)
         {
             var frames = CreateFrames(stackTrace, isCurrentStackTrace)
                 // Sentry expects the frames to be sent in reversed order
@@ -68,21 +70,27 @@ namespace Sentry.Extensibility
                 stacktrace.Frames.Add(frame);
             }
 
-            return stacktrace.Frames.Count == 0
-                ? null
-                : stacktrace;
+            return stacktrace.Frames.Count != 0
+                ? stacktrace
+                : null;
         }
 
         /// <summary>
         /// Creates an enumerator of <see cref="SentryStackFrame"/> from a <see cref="StackTrace"/>.
         /// </summary>
-        /// <param name="stackTrace"></param>
-        /// <param name="isCurrentStackTrace"></param>
-        /// <returns></returns>
         internal IEnumerable<SentryStackFrame> CreateFrames(StackTrace stackTrace, bool isCurrentStackTrace)
         {
-            var frames = stackTrace?.GetFrames();
-            if (frames == null)
+            var frames = _options.StackTraceMode switch
+            {
+                StackTraceMode.Enhanced => EnhancedStackTrace.GetFrames(stackTrace).Select(p => p as StackFrame),
+                _ => stackTrace.GetFrames()
+// error CS8619: Nullability of reference types in value of type 'StackFrame?[]' doesn't match target type 'IEnumerable<StackFrame>'.
+#if NETCOREAPP3_0
+                                            .Where(f => f is not null)
+#endif
+            };
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalse - Backward compatibility
+            if (frames is null)
             {
                 _options.DiagnosticLogger?.LogDebug("No stack frames found. AttachStacktrace: '{0}', isCurrentStackTrace: '{1}'",
                     _options.AttachStacktrace, isCurrentStackTrace);
@@ -90,25 +98,26 @@ namespace Sentry.Extensibility
                 yield break;
             }
 
-            var firstFrames = true;
+            var firstFrame = true;
             foreach (var stackFrame in frames)
             {
+                if (stackFrame is null)
+                {
+                    continue;
+                }
+
                 // Remove the frames until the call for capture with the SDK
-                if (firstFrames
+                if (firstFrame
                     && isCurrentStackTrace
-                    && stackFrame.GetMethod() is MethodBase method
+                    && stackFrame.GetMethod() is { } method
                     && method.DeclaringType?.AssemblyQualifiedName?.StartsWith("Sentry") == true)
                 {
                     continue;
                 }
 
-                firstFrames = false;
+                firstFrame = false;
 
-                var frame = CreateFrame(stackFrame, isCurrentStackTrace);
-                if (frame != null)
-                {
-                    yield return frame;
-                }
+                yield return CreateFrame(stackFrame, isCurrentStackTrace);
             }
         }
 
@@ -117,9 +126,6 @@ namespace Sentry.Extensibility
         /// <summary>
         /// Create a <see cref="SentryStackFrame"/> from a <see cref="StackFrame"/>.
         /// </summary>
-        /// <param name="stackFrame"></param>
-        /// <param name="isCurrentStackTrace"></param>
-        /// <returns></returns>
         protected virtual SentryStackFrame CreateFrame(StackFrame stackFrame, bool isCurrentStackTrace) => InternalCreateFrame(stackFrame, true);
 
         /// <summary>
@@ -128,16 +134,39 @@ namespace Sentry.Extensibility
         protected SentryStackFrame InternalCreateFrame(StackFrame stackFrame, bool demangle)
         {
             const string unknownRequiredField = "(unknown)";
+
             var frame = new SentryStackFrame();
-            if (GetMethod(stackFrame) is MethodBase method)
+            if (GetMethod(stackFrame) is { } method)
             {
-                // TODO: SentryStackFrame.TryParse and skip frame instead of these unknown values:
                 frame.Module = method.DeclaringType?.FullName ?? unknownRequiredField;
                 frame.Package = method.DeclaringType?.Assembly.FullName;
-                frame.Function = method.Name;
+
+                if (_options.StackTraceMode == StackTraceMode.Enhanced && stackFrame is EnhancedStackFrame enhancedStackFrame)
+                {
+                    var sb = new StringBuilder();
+                    frame.Function = enhancedStackFrame.MethodInfo.Append(sb, false).ToString();
+
+                    if (enhancedStackFrame.MethodInfo.DeclaringType is { } declaringType)
+                    {
+                        sb.Clear();
+                        sb.AppendTypeDisplayName(declaringType);
+                        frame.Module = sb.ToString();
+                    }
+                }
+                else
+                {
+                    frame.Function = method.Name;
+                }
+
+                // Originally we didn't skip methods from dynamic assemblies, so not to break compatibility:
+                if (_options.StackTraceMode != StackTraceMode.Original && method.Module.Assembly.IsDynamic)
+                {
+                    frame.InApp = false;
+                }
             }
 
-            frame.InApp = !IsSystemModuleName(frame.Module);
+            frame.InApp ??= !IsSystemModuleName(frame.Module);
+
             frame.FileName = stackFrame.GetFileName();
 
             // stackFrame.HasILOffset() throws NotImplemented on Mono 5.12
@@ -159,10 +188,18 @@ namespace Sentry.Extensibility
                 frame.ColumnNumber = colNo;
             }
 
-            if (demangle)
+            if (demangle && _options.StackTraceMode != StackTraceMode.Enhanced)
             {
                 DemangleAsyncFunctionName(frame);
                 DemangleAnonymousFunction(frame);
+            }
+
+            if (_options.StackTraceMode == StackTraceMode.Enhanced)
+            {
+                // In Enhanced mode, Module (which in this case is the Namespace)
+                // is already prepended to the function, after return type.
+                // Removing here at the end because this is used to resolve InApp=true/false
+                frame.Module = null;
             }
 
             return frame;
@@ -172,33 +209,18 @@ namespace Sentry.Extensibility
         /// Get a <see cref="MethodBase"/> from <see cref="StackFrame"/>.
         /// </summary>
         /// <param name="stackFrame">The <see cref="StackFrame"/></param>.
-        /// <returns></returns>
-        protected virtual MethodBase GetMethod(StackFrame stackFrame) => stackFrame.GetMethod();
+        protected virtual MethodBase? GetMethod(StackFrame stackFrame)
+            => stackFrame.GetMethod();
 
-        private bool IsSystemModuleName(string moduleName)
+        private bool IsSystemModuleName(string? moduleName)
         {
             if (string.IsNullOrEmpty(moduleName))
             {
                 return false;
             }
 
-            foreach (var include in _options.InAppInclude)
-            {
-                if (moduleName.StartsWith(include, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-
-            foreach (var exclude in _options.InAppExclude)
-            {
-                if (moduleName.StartsWith(exclude, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return _options.InAppInclude?.Any(include => moduleName.StartsWith(include, StringComparison.Ordinal)) != true &&
+                   _options.InAppExclude?.Any(exclude => moduleName.StartsWith(exclude, StringComparison.Ordinal)) == true;
         }
 
         /// <summary>
@@ -239,7 +261,7 @@ namespace Sentry.Extensibility
         /// </summary>
         internal static void DemangleAnonymousFunction(SentryStackFrame frame)
         {
-            if (frame?.Function == null)
+            if (frame.Function == null)
             {
                 return;
             }

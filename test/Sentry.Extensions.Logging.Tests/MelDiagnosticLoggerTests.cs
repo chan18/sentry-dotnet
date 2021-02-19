@@ -1,7 +1,8 @@
+#if NETCOREAPP2_1 || NET461
 using System;
+#endif
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using Sentry.Protocol;
 using Xunit;
 
 namespace Sentry.Extensions.Logging.Tests
@@ -13,16 +14,16 @@ namespace Sentry.Extensions.Logging.Tests
             public ILogger<ISentryClient> MelLogger { get; set; } = Substitute.For<ILogger<ISentryClient>>();
             public SentryLevel Level { get; set; } = SentryLevel.Warning;
 
-            public MelDiagnosticLogger GetSut() => new MelDiagnosticLogger(MelLogger, Level);
+            public MelDiagnosticLogger GetSut() => new(MelLogger, Level);
         }
 
-        private readonly Fixture _fixture = new Fixture();
+        private readonly Fixture _fixture = new();
 
         [Fact]
         public void LogLevel_ErrorLevel_IsEnabledTrue()
         {
             var sut = _fixture.GetSut();
-            _fixture.MelLogger.IsEnabled(LogLevel.Error).Returns(true);
+            _ = _fixture.MelLogger.IsEnabled(LogLevel.Error).Returns(true);
             Assert.True(sut.IsEnabled(SentryLevel.Error));
         }
 
@@ -30,21 +31,21 @@ namespace Sentry.Extensions.Logging.Tests
         public void LogLevel_InfoLevel_IsEnabledFalse()
         {
             var sut = _fixture.GetSut();
-            _fixture.MelLogger.IsEnabled(LogLevel.Information).Returns(true);
+            _ = _fixture.MelLogger.IsEnabled(LogLevel.Information).Returns(true);
             Assert.False(sut.IsEnabled(SentryLevel.Info));
         }
 
         [Fact]
         public void LogLevel_HigherLevel_IsEnabled()
         {
-            _fixture.MelLogger.IsEnabled(LogLevel.Debug).Returns(true);
+            _ = _fixture.MelLogger.IsEnabled(LogLevel.Debug).Returns(true);
             var sut = _fixture.GetSut();
             Assert.False(sut.IsEnabled(SentryLevel.Info));
         }
 
-        // .NET Core 3 has turned FormattedLogValues into an internal readonly struct
+        // .NET Core 3 (and hence .NET 5) has turned FormattedLogValues into an internal readonly struct
         // and now we can't match that with NSubstitute
-#if !NETCOREAPP3_1
+#if NETCOREAPP2_1 || NET461
         [Fact]
         public void Log_PassedThrough()
         {
@@ -54,11 +55,11 @@ namespace Sentry.Extensions.Logging.Tests
 
             _fixture.Level = SentryLevel.Debug;
             var sut = _fixture.GetSut();
-            _fixture.MelLogger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+            _ = _fixture.MelLogger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
 
             sut.Log(expectedLevel, expectedMessage, expectedException);
 
-            _fixture.MelLogger.Received(1).Log<object>(
+            _fixture.MelLogger.Received(1).Log(
                 expectedLevel.ToMicrosoft(),
                 0,
                 Arg.Is<object>(e => e.ToString() == expectedMessage),

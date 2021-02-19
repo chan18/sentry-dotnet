@@ -2,8 +2,6 @@ using System;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Sentry.Extensibility;
-using Sentry.Internal;
-using Sentry.Protocol;
 using Xunit;
 
 namespace Sentry.Extensions.Logging.Tests
@@ -16,13 +14,13 @@ namespace Sentry.Extensions.Logging.Tests
             const SentryLevel expected = SentryLevel.Debug;
             var sut = Substitute.For<ILoggerFactory>();
             var hub = Substitute.For<IHub>();
-            hub.IsEnabled.Returns(true);
+            _ = hub.IsEnabled.Returns(true);
             var scope = new Scope(new SentryOptions());
             hub.When(w => w.ConfigureScope(Arg.Any<Action<Scope>>()))
                 .Do(info => info.Arg<Action<Scope>>()(scope));
-            SentrySdk.UseHub(hub);
+            _ = SentrySdk.UseHub(hub);
 
-            sut.AddSentry(o =>
+            _ = sut.AddSentry(o =>
             {
                 o.InitializeSdk = false; // use the mock above
                 o.ConfigureScope(s => s.Level = expected);
@@ -37,13 +35,13 @@ namespace Sentry.Extensions.Logging.Tests
             const SentryLevel expected = SentryLevel.Debug;
             var sut = Substitute.For<ILoggerFactory>();
             var hub = Substitute.For<IHub>();
-            hub.IsEnabled.Returns(false);
+            _ = hub.IsEnabled.Returns(false);
             var scope = new Scope(new SentryOptions());
             hub.When(w => w.ConfigureScope(Arg.Any<Action<Scope>>()))
                 .Do(info => info.Arg<Action<Scope>>()(scope));
-            SentrySdk.UseHub(hub);
+            _ = SentrySdk.UseHub(hub);
 
-            sut.AddSentry(o =>
+            _ = sut.AddSentry(o =>
             {
                 o.InitializeSdk = false; // use the mock above
                 o.ConfigureScope(s => s.Level = expected);
@@ -57,21 +55,10 @@ namespace Sentry.Extensions.Logging.Tests
         {
             var sut = Substitute.For<ILoggerFactory>();
 
-            sut.AddSentry(o => o.InitializeSdk = false);
+            _ = sut.AddSentry(o => o.InitializeSdk = false);
 
             sut.Received(1)
                 .AddProvider(Arg.Is<SentryLoggerProvider>(p => p.Hub == HubAdapter.Instance));
-        }
-
-        [Fact]
-        public void AddSentry_DefaultOptions_InstantiateOptionalHub()
-        {
-            var sut = Substitute.For<ILoggerFactory>();
-
-            sut.AddSentry();
-
-            sut.Received(1)
-                .AddProvider(Arg.Is<SentryLoggerProvider>(p => p.Hub is OptionalHub));
         }
 
         [Fact]
@@ -79,13 +66,13 @@ namespace Sentry.Extensions.Logging.Tests
         {
             SentryLoggingOptions options = null;
             var sut = Substitute.For<ILoggerFactory>();
-            sut.AddSentry(o =>
+            _ = sut.AddSentry(o =>
             {
                 o.Debug = true;
                 options = o;
             });
 
-            Assert.IsType<MelDiagnosticLogger>(options.DiagnosticLogger);
+            _ = Assert.IsType<MelDiagnosticLogger>(options.DiagnosticLogger);
         }
 
         [Fact]
@@ -94,7 +81,7 @@ namespace Sentry.Extensions.Logging.Tests
             SentryLoggingOptions options = null;
             var sut = Substitute.For<ILoggerFactory>();
             var diagnosticLogger = Substitute.For<IDiagnosticLogger>();
-            sut.AddSentry(o =>
+            _ = sut.AddSentry(o =>
             {
                 o.Debug = true;
                 Assert.Null(o.DiagnosticLogger);
@@ -110,7 +97,7 @@ namespace Sentry.Extensions.Logging.Tests
         {
             var callbackInvoked = false;
             var expected = Substitute.For<ILoggerFactory>();
-            expected.AddSentry(o => { callbackInvoked = true; });
+            _ = expected.AddSentry(_ => callbackInvoked = true);
 
             Assert.True(callbackInvoked);
         }
@@ -119,7 +106,7 @@ namespace Sentry.Extensions.Logging.Tests
         public void AddSentry_NoOptionsDelegate_ProviderAdded()
         {
             var expected = Substitute.For<ILoggerFactory>();
-            expected.AddSentry();
+            _ = expected.AddSentry();
 
             expected.Received(1)
                 .AddProvider(Arg.Is<ILoggerProvider>(p => p is SentryLoggerProvider));
@@ -149,7 +136,7 @@ namespace Sentry.Extensions.Logging.Tests
             var expected = Substitute.For<ILoggerFactory>();
 
             var invoked = false;
-            expected.AddSentry(o =>
+            _ = expected.AddSentry(o =>
             {
                 Assert.NotNull(o);
                 invoked = true;
